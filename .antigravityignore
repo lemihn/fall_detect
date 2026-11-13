@@ -1,0 +1,15 @@
+﻿*.mp4
+*.avi
+*.jpg
+*.png
+*.pt
+*.pth
+*.onnx
+*.engine
+*.weights
+dataset/
+data/
+runs/
+weights/
+venv/
+__pycache__/
