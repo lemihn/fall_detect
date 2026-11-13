@@ -32,9 +32,19 @@
 #define BUZZER_PIN   21
 #define LED_RED_PIN  22
 
+bool alarmActive = false;
+unsigned long lastSirenToggle = 0;
+bool sirenHighTone = false;
+
 void setAlarmHardware(bool isFall) {
-  digitalWrite(BUZZER_PIN,  isFall ? HIGH : LOW);
+  alarmActive = isFall;
   digitalWrite(LED_RED_PIN, isFall ? HIGH : LOW);
+  if (isFall) {
+    tone(BUZZER_PIN, 2600); // Phat xung am thanh 2600Hz cho loa 8 Ohm
+  } else {
+    noTone(BUZZER_PIN);
+    digitalWrite(BUZZER_PIN, LOW);
+  }
 }
 
 Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
@@ -997,7 +1007,7 @@ void handleSetState() {
       lastLoggedState = "FALL";
     }
 
-    showOLED("FALL ALERT!", "Phat hien te nga", "Kiem tra ngay");
+    showOLED("FALL!!!!", "Phat hien te nga", "Kiem tra ngay");
     server.send(200, "text/plain; charset=utf-8", "Đã chuyển FALL");
   }
 
@@ -1190,6 +1200,13 @@ void setup() {
 // =======================
 void loop() {
   server.handleClient();
+
+  // Neu dang bao dong TE NGA: phat tieng coi hu 2 tan so (2000Hz <-> 2800Hz) cho loa 8 Ohm
+  if (alarmActive && millis() - lastSirenToggle > 300) {
+    lastSirenToggle = millis();
+    sirenHighTone = !sirenHighTone;
+    tone(BUZZER_PIN, sirenHighTone ? 2800 : 2000);
+  }
 
   if (!setupMode) {
     if (WiFi.status() == WL_CONNECTED) {
