@@ -171,6 +171,8 @@ def ai_thread(args, shared, device):
     cap = open_capture(src)
     print(f">>> Camera/video {src}: {'OK' if cap.isOpened() else 'KHONG MO DUOC'}")
     is_file = isinstance(src, str)
+    vid_fps = (cap.get(cv2.CAP_PROP_FPS) or 30.0) if is_file else 30.0
+    frame_idx = 0
     prev = time.time()
     fps = 0.0
     while True:
@@ -182,20 +184,29 @@ def ai_thread(args, shared, device):
         if sw is not None and sw != src:
             cap.release()
             cap, src, is_file = open_capture(sw), sw, isinstance(sw, str)
+            vid_fps = (cap.get(cv2.CAP_PROP_FPS) or 30.0) if is_file else 30.0
+            frame_idx = 0
             pipe.reset()
         ok, frame = cap.read() if cap.isOpened() else (False, None)
         if not ok:
             if is_file:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                frame_idx = 0
                 pipe.reset()
             time.sleep(0.05)
             continue
         now = time.time()
-        present, warm = pipe.process(frame, now)
+        t_sim = (frame_idx / vid_fps) if is_file else now
+        frame_idx += 1
+        present, warm = pipe.process(frame, t_sim)
         fps = 0.9 * fps + 0.1 / max(now - prev, 1e-3)
         prev = now
         pipe.draw(frame, present, warm)
         esp.send(pipe.out["state"])
+        if args.show:
+            cv2.imshow("Fall Detection v2 (Nhan Q de thoat)", frame)
+            if (cv2.waitKey(1) & 0xFF) in (ord("q"), ord("Q"), 27):
+                os._exit(0)
         ok, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
         with shared.cond:
             shared.jpeg = jpg.tobytes()
@@ -294,8 +305,9 @@ def main():
     ap.add_argument("--esp32-ip", default=os.environ.get("ESP32_IP", ""))
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=5000)
-    ap.add_argument("--fall-thr", type=float, default=0.75)
+    ap.add_argument("--fall-thr", type=float, default=0.60)
     ap.add_argument("--fall-confirm", type=int, default=3)
+    ap.add_argument("--show", action="store_true", help="hien cua so video OpenCV truc tiep")
     ap.add_argument("--selftest", default=None)
     args = ap.parse_args()
     if not Path(args.weights).exists():

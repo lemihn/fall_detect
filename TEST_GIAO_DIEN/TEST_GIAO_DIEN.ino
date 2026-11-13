@@ -1,23 +1,43 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <Preferences.h>
-#include <Wire.h>
+#include <SPI.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
+#include <Adafruit_ST7735.h>
 #include <time.h>
 
 // =======================
-// OLED 0.91 SSD1306
+// MAN HINH 1.8" TFT SPI 128x160 v1.1 (ST7735)
 // =======================
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 32
+// Noi day ESP32 (VSPI chuan):
+//   VCC       -> 3V3 hoac 5V
+//   GND       -> GND
+//   SCL (SCK) -> GPIO 18
+//   SDA (MOSI)-> GPIO 23
+//   RES (RST) -> GPIO 4
+//   DC  (A0)  -> GPIO 2
+//   CS        -> GPIO 5
+//   BL  (LED) -> 3V3
+#define TFT_CS    5
+#define TFT_RST   4
+#define TFT_DC    2
 
-Adafruit_SSD1306 display(
-  SCREEN_WIDTH,
-  SCREEN_HEIGHT,
-  &Wire,
-  -1
-);
+// =======================
+// COI BAO DONG (BUZZER) & LED DO
+// =======================
+// Luu y: GPIO 19 bi thu vien SPI cua man TFT chiem lam chan MISO!
+// Vi vay dung GPIO 21 (D21) va GPIO 22 (D22) hoan toan doc lap:
+//   Coi (Buzzer): chan (+) -> GPIO 21 (D21), chan (-) -> GND
+//   LED do      : chan (+) -> GPIO 22 (D22), chan (-) -> GND
+#define BUZZER_PIN   21
+#define LED_RED_PIN  22
+
+void setAlarmHardware(bool isFall) {
+  digitalWrite(BUZZER_PIN,  isFall ? HIGH : LOW);
+  digitalWrite(LED_RED_PIN, isFall ? HIGH : LOW);
+}
+
+Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
 // =======================
 // WEB SERVER + MEMORY
@@ -28,7 +48,7 @@ Preferences preferences;
 // =======================
 // WIFI AP CAI DAT
 // =======================
-const char* ap_ssid = "FALL_SETUP";
+const char* ap_ssid = "SET_UP";
 const char* ap_password = "12345678";
 
 // =======================
@@ -54,8 +74,8 @@ bool setupMode = false;
 // Neu dung ESP32-CAM:
 // String cameraURL = "http://192.168.1.88/stream";
 
-// Chua co camera thi de trong
-String cameraURL = "";
+// Luong video AI tu Raspberry Pi (doi IP neu Pi doi IP)
+String cameraURL = "http://192.168.1.103:5000/video_feed";
 
 // =======================
 // BIEN HE THONG
@@ -90,23 +110,62 @@ String fallTimeLogs[MAX_FALL_TIMES];
 int fallTimeCount = 0;
 
 // =======================
-// OLED DISPLAY
+// HIEN THI MAN HINH 1.8" TFT ST7735 (160x128 ngang)
 // =======================
 void showOLED(String line1, String line2, String line3) {
-  display.clearDisplay();
-  display.setTextColor(SSD1306_WHITE);
-  display.setTextSize(1);
+  tft.fillScreen(ST77XX_BLACK);
+  tft.setTextWrap(false);
 
-  display.setCursor(0, 0);
-  display.println(line1);
+  // Thanh tieu de tren cung
+  uint16_t headerColor = ST77XX_BLUE;
+  uint16_t stateColor  = ST77XX_GREEN;
+  if (line1.indexOf("FALL") >= 0 && line1.indexOf("SETUP") < 0 && line1.indexOf("SYS") < 0) {
+    headerColor = ST77XX_RED;
+    stateColor  = ST77XX_RED;
+  } else if (line1.indexOf("WARN") >= 0) {
+    headerColor = ST77XX_ORANGE;
+    stateColor  = ST77XX_YELLOW;
+  }
 
-  display.setCursor(0, 11);
-  display.println(line2);
+  tft.fillRect(0, 0, 160, 22, headerColor);
+  tft.setTextColor(ST77XX_WHITE);
+  tft.setTextSize(1);
+  tft.setCursor(8, 7);
+  tft.println("SM-LAB FALL DETECTION");
 
-  display.setCursor(0, 22);
-  display.println(line3);
+  // Dong 1: Trang thai chinh (co chu lon, toi da 12 ky tu tren man 160px)
+  tft.setTextColor(stateColor);
+  tft.setTextSize(2);
+  tft.setCursor(6, 30);
+  tft.println(line1);
 
-  display.display();
+  // Duong ke ngang phan cach
+  tft.drawFastHLine(6, 54, 148, 0x7BEF);
+
+  // Dong 2: Thong tin chi tiet
+  tft.setTextColor(ST77XX_WHITE);
+  tft.setTextSize(1);
+  tft.setCursor(6, 64);
+  tft.println(line2);
+
+  // Dong 3: Dia chi IP / Huong dan
+  tft.setTextColor(ST77XX_CYAN);
+  tft.setTextSize(1);
+  tft.setCursor(6, 84);
+  tft.println(line3);
+
+  // Dong 4: Thoi gian nga gan nhat (bo dau ngoac vuong de vua khit 1 dong 160px)
+  String fallText = lastFallTime;
+  if (fallText == "Chưa có") {
+    fallText = "None";
+  } else {
+    fallText.replace("[", "");
+    fallText.replace("]", "");
+  }
+  tft.setTextColor(ST77XX_YELLOW);
+  tft.setTextSize(1);
+  tft.setCursor(5, 106);
+  tft.println("Fall: " + fallText);
 }
 
 // =======================
@@ -209,8 +268,8 @@ String getFallTimesJSON() {
 // =======================
 void loadWiFi() {
   preferences.begin("wifi", true);
-  savedSSID = preferences.getString("ssid", "");
-  savedPASS = preferences.getString("pass", "");
+  savedSSID = preferences.getString("ssid", "Chi Tam");
+  savedPASS = preferences.getString("pass", "0909747517");
   preferences.end();
 }
 
@@ -897,13 +956,14 @@ void handleSetState() {
     aiState = "NORMAL";
     confidence = 0.95;
     alertText = "Hệ thống đang theo dõi an toàn";
+    setAlarmHardware(false);
 
     if (lastLoggedState != "NORMAL") {
       addDetectionLog("Trạng thái bình thường - hệ thống an toàn");
       lastLoggedState = "NORMAL";
     }
 
-    showOLED("SM-LAB FALL SYS", "State: NORMAL", "IP: " + systemIP);
+    showOLED("SAFE / OK", "State: NORMAL", "IP: " + systemIP);
     server.send(200, "text/plain; charset=utf-8", "Đã chuyển NORMAL");
   }
 
@@ -911,13 +971,14 @@ void handleSetState() {
     aiState = "WARNING";
     confidence = 0.88;
     alertText = "Phát hiện tư thế bất thường";
+    setAlarmHardware(false);
 
     if (lastLoggedState != "WARNING") {
       addDetectionLog("Phát hiện tư thế bất thường - cần theo dõi");
       lastLoggedState = "WARNING";
     }
 
-    showOLED("WARNING", "Tu the bat thuong", "Check now");
+    showOLED("WARNING!", "Tu the bat thuong", "Check now");
     server.send(200, "text/plain; charset=utf-8", "Đã chuyển WARNING");
   }
 
@@ -925,6 +986,7 @@ void handleSetState() {
     aiState = "FALL";
     confidence = 0.93;
     alertText = "Cảnh báo! Phát hiện người già bị té ngã";
+    setAlarmHardware(true);
 
     String fallTime = getTimeNow();
     lastFallTime = fallTime;
@@ -935,7 +997,7 @@ void handleSetState() {
       lastLoggedState = "FALL";
     }
 
-    showOLED("!!! FALL ALERT", "Phat hien te nga", "Kiem tra ngay");
+    showOLED("FALL ALERT!", "Phat hien te nga", "Kiem tra ngay");
     server.send(200, "text/plain; charset=utf-8", "Đã chuyển FALL");
   }
 
@@ -971,10 +1033,11 @@ void handleReset() {
   alertText = "Hệ thống đã reset";
   smsStatus = "Chưa gửi";
   callStatus = "Chưa gọi";
+  setAlarmHardware(false);
 
   addDetectionLog("Hệ thống đã được reset");
 
-  showOLED("SM-LAB FALL SYS", "State: NORMAL", "IP: " + systemIP);
+  showOLED("SAFE / OK", "State: NORMAL", "IP: " + systemIP);
 
   server.send(200, "text/plain; charset=utf-8", "Đã reset");
 }
@@ -1010,7 +1073,7 @@ void startSetupAP() {
   Serial.print("IP: ");
   Serial.println(systemIP);
 
-  showOLED("FALL SETUP", "WiFi: FALL_SETUP", "IP: 192.168.4.1");
+  showOLED("WIFI SETUP", "WiFi: FALL_SETUP", "IP: 192.168.4.1");
 
   server.on("/", handleRoot);
   server.on("/savewifi", HTTP_POST, handleSaveWiFi);
@@ -1034,7 +1097,7 @@ bool connectWiFi() {
   Serial.print("Dang ket noi WiFi: ");
   Serial.println(savedSSID);
 
-  showOLED("CONNECTING WIFI", savedSSID, "Please wait...");
+  showOLED("CONNECTING", savedSSID, "Please wait...");
 
   unsigned long startTime = millis();
 
@@ -1053,7 +1116,7 @@ bool connectWiFi() {
     Serial.print("IP he thong: ");
     Serial.println(systemIP);
 
-    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer, "time.google.com", "time.nist.gov");
 
     Serial.println("Dang dong bo thoi gian NTP...");
     struct tm timeinfo;
@@ -1064,7 +1127,7 @@ bool connectWiFi() {
       Serial.println("Chua dong bo duoc thoi gian");
     }
 
-    showOLED("SM-LAB FALL SYS", "WiFi: OK", "IP: " + systemIP);
+    showOLED("SAFE / OK", "WiFi: OK", "IP: " + systemIP);
 
     return true;
   }
@@ -1101,11 +1164,17 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
 
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println("OLED FAIL");
-  } else {
-    showOLED("SM-LAB", "OLED OK", "Starting...");
-  }
+  // Khoi tao man hinh 1.8" TFT ST7735 (128x160) TRUOC
+  tft.initR(INITR_BLACKTAB);
+  tft.setRotation(1); // Xoay ngang 160x128 de hien thi dong chu va IP dai ro net
+  tft.fillScreen(ST77XX_BLACK);
+
+  // Khoi tao Coi (Buzzer) va LED do SAU tft.initR de khong bi SPI ghi de
+  pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(LED_RED_PIN, OUTPUT);
+  setAlarmHardware(false);
+
+  showOLED("SM-LAB", "TFT 1.8 OK", "Starting...");
 
   loadWiFi();
 
