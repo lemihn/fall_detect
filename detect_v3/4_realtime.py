@@ -559,6 +559,20 @@ def open_capture(src):
     return cap
 
 
+def resize_input_frame(frame, max_side=720):
+    """Thu nho frame dau vao neu video quay co do phan giai qua lon (FullHD/4K) ma van giu nguyen ty le khung hinh."""
+    if max_side <= 0 or frame is None:
+        return frame
+    h, w = frame.shape[:2]
+    longest = max(w, h)
+    if longest > max_side:
+        scale = float(max_side) / float(longest)
+        new_w = max(1, int(round(w * scale)))
+        new_h = max(1, int(round(h * scale)))
+        frame = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    return frame
+
+
 def ai_thread(args, shared, device):
     pipe = Pipeline(args.model, args.weights, device,
                     dict(fall_thr=args.fall_thr, fall_confirm=args.fall_confirm),
@@ -597,6 +611,7 @@ def ai_thread(args, shared, device):
                 pipe.reset()
             time.sleep(0.05)
             continue
+        frame = resize_input_frame(frame, args.max_size)
         now = time.time()
         t_sim = (frame_idx / vid_fps) if is_file else now
         frame_idx += 1
@@ -647,14 +662,18 @@ def ai_thread(args, shared, device):
 
 
 PAGE = """<!doctype html><meta charset=utf-8><title>Fall detection v3</title>
-<body style="background:#111827;color:#f3f4f6;font-family:sans-serif;text-align:center">
-<h2>Giám sát té ngã v3 (Đa người & Đa góc) — ESP32 + Telegram Alert (10s)</h2>
-<div id=banner style="margin:8px auto;padding:10px;max-width:720px;border-radius:8px;font-size:20px">...</div>
-<div id=plist style="margin:6px auto;max-width:720px;font-size:14px;color:#cbd5e1"></div>
-<img src="/video_feed" style="max-width:96%;border-radius:10px"><br><br>
-<button onclick="fetch('/reset_alert')">Reset cảnh báo</button>
-<button onclick="fetch('/switch_camera/0')">Camera 0</button>
-<button onclick="fetch('/switch_camera/1')">Camera 1</button>
+<body style="background:#111827;color:#f3f4f6;font-family:sans-serif;text-align:center;margin:0;padding:8px">
+<h2 style="margin:6px 0">Giám sát té ngã v3 (Đa người & Đa góc) — ESP32 + Telegram Alert (10s)</h2>
+<div id=banner style="margin:6px auto;padding:8px;max-width:680px;border-radius:8px;font-size:18px">...</div>
+<div id=plist style="margin:4px auto;max-width:680px;font-size:14px;color:#cbd5e1"></div>
+<img id=vid src="/video_feed" style="max-width:680px;max-height:65vh;width:auto;height:auto;border-radius:10px;border:2px solid #374151"><br>
+<div style="margin:8px auto">
+  <button onclick="fetch('/reset_alert')">Reset cảnh báo</button>
+  <button onclick="fetch('/switch_camera/0')">Camera 0</button>
+  <button onclick="fetch('/switch_camera/1')">Camera 1</button>
+  <span style="margin-left:12px;font-size:13px;color:#9ca3af">Cỡ khung hình:</span>
+  <input type="range" min="360" max="1080" value="680" oninput="document.getElementById('vid').style.maxWidth=this.value+'px';document.getElementById('vid').style.maxHeight='none'">
+</div>
 <script>
 const C={normal:'#166534',sit:'#9a6700',lie:'#86198f',fall:'#b91c1c'};
 setInterval(()=>fetch('/status').then(r=>r.json()).then(s=>{
@@ -777,6 +796,8 @@ def main():
     ap.add_argument("--port", type=int, default=5000)
     ap.add_argument("--fall-thr", type=float, default=0.69)
     ap.add_argument("--fall-confirm", type=int, default=4)
+    ap.add_argument("--max-size", type=int, default=640,
+                    help="Gioi han chieu dai/rong lon nhat cua video dau vao (mac dinh 640px, dat 0 neu muon giu nguyen goc)")
     ap.add_argument("--show", action="store_true", help="hien cua so video OpenCV truc tiep")
     ap.add_argument("--selftest", default=None)
     args = ap.parse_args()
