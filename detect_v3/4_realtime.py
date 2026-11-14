@@ -422,13 +422,18 @@ class TelegramSender:
                 data = json.loads(self.chats_file.read_text(encoding="utf-8"))
                 for cid in data.get("chat_ids", []):
                     self.chat_ids.add(str(cid))
+                self.last_update_id = int(data.get("last_update_id", 0))
             except Exception:
                 pass
 
     def _save_chats(self):
         try:
             self.chats_file.write_text(
-                json.dumps({"chat_ids": sorted(self.chat_ids)}, ensure_ascii=False, indent=2),
+                json.dumps(
+                    {"chat_ids": sorted(self.chat_ids), "last_update_id": self.last_update_id},
+                    ensure_ascii=False,
+                    indent=2,
+                ),
                 encoding="utf-8",
             )
         except Exception:
@@ -445,8 +450,12 @@ class TelegramSender:
             r = requests.get(url, params=params, timeout=5.0).json()
             if not r.get("ok"):
                 return
+            changed = False
             for upd in r.get("result", []):
-                self.last_update_id = max(self.last_update_id, int(upd.get("update_id", 0)))
+                uid = int(upd.get("update_id", 0))
+                if uid > self.last_update_id:
+                    self.last_update_id = uid
+                    changed = True
                 msg = upd.get("message") or upd.get("channel_post") or {}
                 chat = msg.get("chat") or {}
                 cid = chat.get("id")
@@ -455,8 +464,6 @@ class TelegramSender:
                     with self.lock:
                         is_new = cid_str not in self.chat_ids
                         self.chat_ids.add(cid_str)
-                        if is_new:
-                            self._save_chats()
                     text = (msg.get("text") or "").strip()
                     if is_new or text.startswith("/start"):
                         name = chat.get("first_name") or chat.get("title") or "ban"
@@ -471,6 +478,8 @@ class TelegramSender:
                             timeout=5.0,
                         )
                         print(f">>> [Telegram] Da dang ky nguoi nhan moi: {name} (chat_id={cid_str})")
+            if changed:
+                self._save_chats()
         except Exception:
             pass
 
