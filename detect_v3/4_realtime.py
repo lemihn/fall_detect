@@ -603,23 +603,27 @@ def ai_thread(args, shared, device):
         present, warm = pipe.process(frame, t_sim)
         fps = 0.9 * fps + 0.1 / max(now - prev, 1e-3)
         prev = now
-        pipe.draw(frame, present, warm)
 
         # 1. Phat tin hieu NGAY LAP TUC sang ESP32 de bat loa va den canh bao tai cho
         esp.send(pipe.out["state"])
 
+        # 2. Neu nguoi nga nam bat dong >= telegram_delay (mac dinh 10s) ma khong thay doi trang thai
+        #    -> gui anh GOC tu camera (KHONG ve khung xuong pose detection) kem thoi gian nga qua Telegram
+        if pipe.out.get("telegram_triggers"):
+            ok_raw, raw_jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            raw_jpg_bytes = raw_jpg.tobytes() if ok_raw else None
+            for trig in pipe.out["telegram_triggers"]:
+                tele.send_fall_alert(
+                    person_id=trig["id"],
+                    duration_s=trig["since"],
+                    fall_time_str=trig["fall_time"],
+                    camera_src=str(src),
+                    jpg_bytes=raw_jpg_bytes,
+                )
+
+        pipe.draw(frame, present, warm)
         ok, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 82])
         jpg_bytes = jpg.tobytes() if ok else None
-
-        # 2. Neu nguoi nga nam bat dong >= telegram_delay (mac dinh 10s) ma khong thay doi trang thai -> gui Telegram kem anh + thoi gian nga
-        for trig in pipe.out.get("telegram_triggers", []):
-            tele.send_fall_alert(
-                person_id=trig["id"],
-                duration_s=trig["since"],
-                fall_time_str=trig["fall_time"],
-                camera_src=str(src),
-                jpg_bytes=jpg_bytes,
-            )
 
         if args.show:
             cv2.imshow("Fall Detection v3 Multi-Person (Nhan Q de thoat)", frame)
@@ -732,8 +736,7 @@ def selftest(args, device):
         for trig in pipe.out.get("telegram_triggers", []):
             tele_events.append((t, trig))
             if tele is not None:
-                pipe.draw(frame, present, warm)
-                ok_jpg, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 82])
+                ok_jpg, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
                 tele.send_fall_alert(
                     person_id=trig["id"],
                     duration_s=trig["since"],
