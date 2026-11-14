@@ -84,7 +84,7 @@ def convert_video_to_npz(video_path: Path, label_name: str, out_dir: Path, pose:
         phase[s2:] = LIE
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    stem = f"{label_name}_{video_path.stem}_{int(time.time() * 100) % 100000}"
+    stem = f"{label_name}_{video_path.stem}"
     out_path = out_dir / f"{stem}.npz"
     np.savez_compressed(
         out_path,
