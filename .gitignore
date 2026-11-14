@@ -33,7 +33,8 @@ detect_v3/fallvision_cache/
 detect_v3/mc_cache/
 detect_v3/gmd_cache/
 detect_v3/external_data/
-detect_v3/own_data/
+detect_v3/own_videos/
+detect_v3/detect_v3/
 Screenshot*.png
 videos/
 runs/
