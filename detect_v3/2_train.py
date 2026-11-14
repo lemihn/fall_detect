@@ -96,14 +96,16 @@ def main():
     print("train windows (dong bang):", dict(zip(CLASS_NAMES, class_counts(items_fro).tolist())))
     print("val   windows (that)     :", dict(zip(CLASS_NAMES, class_counts(items_va).tolist())))
 
-    # Can bang lay mau theo (nguon du lieu, lop): tang trong so cho MC-Fall (cam tran), GMDCSA24, URFD
+    # Can bang lay mau theo (nguon du lieu, lop): tang trong so cho MC-Fall (cam tran), GMDCSA24, URFD va video tu quay (user_own)
     def domain_of(s):
         if s.kind in ("mc_fall", "mc_adl"):
             return "mc"
         if s.kind in ("gmd_fall", "gmd_adl"):
             return "gmd"
         if s.kind == "own":
-            return "own"
+            if s.name.startswith("own-cctv_"):
+                return "own"
+            return "user_own"
         if s.name.startswith("fv_"):
             return "fv"
         return "urfd"
@@ -113,8 +115,8 @@ def main():
         key = (domain_of(tr_seqs[it[0]]), it[2], it[3])
         dom_cls_cnt[key] = dom_cls_cnt.get(key, 0) + 1
 
-    # Trong so can bang nhe nhang: giam bao gia ma van giu do nhay FALL cao
-    dom_prior = {"mc": 1.3, "gmd": 1.3, "urfd": 0.9, "own": 0.5, "fv": 0.9}
+    # Trong so can bang nhe nhang: giam bao gia ma van giu do nhay FALL cao; uu tien cao cho video tu quay cua nguoi dung (user_own)
+    dom_prior = {"user_own": 3.0, "mc": 1.3, "gmd": 1.3, "urfd": 0.9, "own": 0.5, "fv": 0.9}
     cls_prior = {0: 1.15, 1: 1.0, 2: 1.0, 3: 1.05}
     base_w = []
     for it in items_tr:

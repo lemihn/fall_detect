@@ -590,12 +590,14 @@ class AlertStateMachine:
         self.cand = NORMAL
         self.cand_run = 0
         self.latched_at = None
+        self.min_cos_latched = 1.0
+        self.max_ar_latched = 0.0
         self.upright_since = None
         self.lie_since = None
         self.absent_since = None
         self.last_t = None
 
-    def update(self, t, probs, present, box_ar=0.5, newly_seen=True, bh_ratio=0.5):
+    def update(self, t, probs, present, box_ar=0.5, newly_seen=True, bh_ratio=0.5, cos_t=0.5):
         if not present:
             if self.absent_since is None:
                 self.absent_since = t
@@ -613,10 +615,20 @@ class AlertStateMachine:
         self.absent_since = None
 
         probs = np.asarray(probs, dtype=np.float32)
+        # Chong nham "tu dung ngoi nhanh xuong ghe" thanh FALL:
+        # Khi ngoi nhanh, dau ha thap nhung truc lung van thang dung (cos_t >= 0.78) va khung hinh van doc (box_ar < 0.80)
+        fast_upright_sit = (cos_t >= 0.78 and box_ar < 0.80 and bh_ratio >= 0.25)
+        if fast_upright_sit and probs[FALL] < 0.90 and (probs[SIT] >= 0.08 or probs[NORMAL] >= 0.15):
+            probs = probs.copy()
+            shift = 0.45 * probs[FALL]
+            probs[FALL] -= shift
+            probs[SIT] += shift
+
         self.p = probs if self.p is None else self.ema * probs + (1 - self.ema) * self.p
         p = self.p
 
-        self.fall_run = self.fall_run + 1 if p[FALL] >= self.fall_thr else 0
+        eff_thr = max(self.fall_thr, 0.82) if fast_upright_sit else self.fall_thr
+        self.fall_run = self.fall_run + 1 if p[FALL] >= eff_thr else 0
         if p[FALL] >= 0.48 and int(np.argmax(p)) == FALL and box_ar >= 0.84 and bh_ratio <= 0.28:
             self.slump_run += 1
             self.slump_peak = max(self.slump_peak, float(probs[FALL]))
@@ -625,14 +637,21 @@ class AlertStateMachine:
             self.slump_peak = 0.0
 
         slump_need = max(self.fall_confirm + 1, 5)
+        need_fall_run = (self.fall_confirm + 2) if fast_upright_sit else self.fall_confirm
         if self.latched_at is None and newly_seen and (
-            self.fall_run >= self.fall_confirm
+            self.fall_run >= need_fall_run
             or (self.slump_run >= slump_need and self.slump_peak >= 0.70 and box_ar >= 0.95)
         ):
             self.latched_at = t
+            self.min_cos_latched = float(cos_t)
+            self.max_ar_latched = float(box_ar)
             self.upright_since = None
             self.lie_since = t
             self.posture = LIE
+
+        if self.latched_at is not None:
+            self.min_cos_latched = min(self.min_cos_latched, float(cos_t))
+            self.max_ar_latched = max(self.max_ar_latched, float(box_ar))
 
         cand = int(np.argmax(p[[NORMAL, SIT, LIE]]))          # 0/1/2 trung voi NORMAL/SIT/LIE
         if self.posture == LIE and cand == NORMAL:
@@ -649,6 +668,15 @@ class AlertStateMachine:
             self.cand, self.cand_run = cand, 1
 
         if self.latched_at is not None:
+            # Neu vua chot nham do ngoi nhanh (lung chua bao gio nghieng va box chua bao gio nam ngang) -> nha ngay sau 0.5s
+            never_tilted = (self.min_cos_latched >= 0.74 and self.max_ar_latched < 0.82)
+            if never_tilted and (t - self.latched_at) >= 0.45 and cos_t >= 0.75 and box_ar < 0.80 and (p[SIT] + p[NORMAL]) >= 0.52:
+                self.latched_at = None
+                self.upright_since = None
+                self.lie_since = None
+                self.posture = SIT if p[SIT] >= p[NORMAL] else NORMAL
+                return self._output(t)
+
             is_upright = (
                 self.posture in (NORMAL, SIT)
                 and box_ar < 0.85

@@ -27,13 +27,13 @@ from fall_common import (BASE_STEP, CLASS_NAMES, FALL, FEAT_DIM, IGNORE, LIE, NO
 BIG = 10 ** 9
 FIRST_END = int(SRC_FPS * 1.0)      # cua so dau tien ket thuc sau >= 1 giay
 
-# Cac doan ngoi/nam trong ADL (so frame theo ten file). IGNORE = dang chuyen tu the, khong chac chan.
-_BED = [(120, 160, IGNORE), (161, 195, SIT), (196, 230, IGNORE), (231, BIG, LIE)]
+# Cac doan ngoi/nam trong ADL (so frame theo ten file). Gan SIT cho ca giai doan dang ngoi xuong ghe/giuong de khong nham ngoi nhanh la FALL.
+_BED = [(120, 195, SIT), (196, 230, IGNORE), (231, BIG, LIE)]
 ADL_ANNOTATIONS = {
-    "adl-07-cam0": [(112, 127, IGNORE), (128, BIG, SIT)],     # ngoi ghe
-    "adl-08-cam0": [(105, 128, IGNORE), (129, BIG, SIT)],     # ngoi ghe
-    "adl-09-cam0": [(88, 130, IGNORE), (131, BIG, SIT)],      # ngoi mep giuong
-    "adl-10-cam0": _BED,                                      # ngoi giuong -> nam giuong
+    "adl-07-cam0": [(112, BIG, SIT)],     # dang ngoi xuong + ngoi ghe
+    "adl-08-cam0": [(105, BIG, SIT)],     # dang ngoi xuong + ngoi ghe
+    "adl-09-cam0": [(88, BIG, SIT)],      # dang ngoi xuong + ngoi mep giuong
+    "adl-10-cam0": _BED,                  # ngoi giuong -> nam giuong
     "adl-11-cam0": _BED,
 }
 # adl-01..06, 12..17: di / cui / ngoi xom nhat do -> toan bo NORMAL (hard negatives chong bao dong gia)

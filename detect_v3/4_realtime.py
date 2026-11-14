@@ -203,16 +203,17 @@ class Pipeline:
             X = torch.from_numpy(np.stack(batch_x)).to(self.device)
             with torch.no_grad():
                 probs_batch = torch.softmax(self.model(X), 1).cpu().numpy()
-            for tr, p in zip(ready_tracks, probs_batch):
+            for tr, p, wx in zip(ready_tracks, probs_batch, batch_x):
                 tr.probs = p
                 bx = tr.last_det[2] if tr.last_det is not None else (0, 0, 1, 2)
                 bh = max(float(bx[3] - bx[1]), 1.0)
                 box_ar = float(bx[2] - bx[0]) / bh
                 bh_ratio = bh / max(float(H), 1.0)
+                cos_t = float(wx[-1, 59])
                 at_border = (bx[0] <= 10.0 or bx[1] <= 10.0 or bx[2] >= W - 10.0 or bx[3] >= H - 10.0)
                 newly_seen = (tr.id in seen_ids) or ((t - tr.last_seen) <= 1.2 / GRID_HZ)
                 present_recent = newly_seen if at_border else ((t - tr.last_seen) <= STALE_S)
-                tr.out = tr.sm.update(t, p, present_recent, box_ar=box_ar, newly_seen=present_recent, bh_ratio=bh_ratio)
+                tr.out = tr.sm.update(t, p, present_recent, box_ar=box_ar, newly_seen=present_recent, bh_ratio=bh_ratio, cos_t=cos_t)
                 is_sticky = tr.out["state"] in ("fall", "lie") or tr.sm.latched_at is not None
                 self.tracker.set_sticky(tr.id, is_sticky, confirmed=tr.confirmed)
 
