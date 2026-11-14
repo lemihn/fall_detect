@@ -8,6 +8,7 @@ Chay THUC TE (webcam / video) -> phat hien & giam sat DOC LAP TAT CA moi nguoi t
     python detect_v3/4_realtime.py --selftest video.mp4
 """
 import argparse
+import json
 import os
 import queue
 import sys
@@ -33,7 +34,9 @@ ROOT = HERE.parent
 WARMUP_S = 1.0          # toi thieu 1 giay lich su de tranh bao gia do lap frame dau video
 STALE_S = 0.35          # mau cu hon nguong nay coi nhu "khong co nguoi"
 TRACK_TTL_S = 2.5       # xoa track neu nguoi binh thuong roi khoi khung hinh qua 2.5s
-FALL_TTL_S = 15.0       # giu track nguoi dang nga/nam bat dong tren san toi da 15s
+FALL_TTL_S = 25.0       # giu track nguoi dang nga/nam bat dong tren san toi da 25s (du cho dem >10s)
+DEFAULT_TELEGRAM_TOKEN = "9047524853:AAEC9YVCLMYpnlEuQjgiVJ_ci568drEvWmo"
+TELEGRAM_CHATS_FILE = HERE / "telegram_chats.json"
 COLORS = {"normal": (0, 200, 0), "sit": (255, 160, 0), "lie": (255, 0, 160), "fall": (0, 0, 255)}
 
 
@@ -56,6 +59,8 @@ class PersonTrack:
         self.vhq_count = 0
         self.max_disp = 0.0
         self.confirmed = False
+        self.fall_wall_time = None          # Thoi diem bat dau nga (HH:MM:SS - DD/MM/YYYY)
+        self.telegram_sent = False          # Da gui canh bao Telegram cho dot nga nay chua
 
     def append_obs(self, t, present, kp, kc, bx, bc=1.0, frame_area=1.0):
         vis = (kc >= 0.30) & (kp[:, 0] > 1.0) & (kp[:, 1] > 1.0)
@@ -112,23 +117,26 @@ class PersonTrack:
 class Pipeline:
     """Multi-person Pose + PoseTracker (IoU + Torso Centroid) -> bo dem thoi gian doc lap tung nguoi -> batch inference."""
 
-    def __init__(self, model_path, weights, device, sm_kwargs):
+    def __init__(self, model_path, weights, device, sm_kwargs, telegram_delay=10.0):
         self.device = device
         self.weights = weights
         self.sm_kwargs = sm_kwargs
+        self.telegram_delay = float(telegram_delay)
         self.pose = YOLO(weights)
         self.model, self.ck = load_model(model_path, device)
         self.tracker = PoseTracker(ttl_s=TRACK_TTL_S, sticky_ttl_s=FALL_TTL_S)
         self.tracks = {}
         self.active_ids = []
-        self.out = dict(state="normal", alarm=0, posture=0, since=0.0, fallen_ids=[], persons=[])
+        self.out = dict(state="normal", alarm=0, posture=0, since=0.0,
+                        fallen_ids=[], persons=[], telegram_sent=False, telegram_triggers=[])
         self.probs = np.array([1, 0, 0, 0], dtype=np.float32)
 
     def reset(self):
         self.tracker.reset()
         self.tracks.clear()
         self.active_ids = []
-        self.out = dict(state="normal", alarm=0, posture=0, since=0.0, fallen_ids=[], persons=[])
+        self.out = dict(state="normal", alarm=0, posture=0, since=0.0,
+                        fallen_ids=[], persons=[], telegram_sent=False, telegram_triggers=[])
         self.probs = np.array([1, 0, 0, 0], dtype=np.float32)
 
     def process(self, frame, t):
@@ -215,13 +223,15 @@ class Pipeline:
             if not tr.confirmed:
                 continue
             dt_unseen = t - tr.last_seen
-            if dt_unseen <= 0.60 or (tr.out["state"] in ("fall", "lie") and dt_unseen <= 8.0):
+            if dt_unseen <= 0.60 or (tr.out["state"] in ("fall", "lie") and dt_unseen <= 18.0):
                 self.active_ids.append(tid)
 
         # Tong hop trang thai toan phong CHỈ TRÊN CÁC TRACK ĐANG HIỆN DIỆN (active_ids)
         fallen_ids = []
         max_alarm = 0
         max_since = 0.0
+        any_telegram_sent = False
+        telegram_triggers = []
         person_summaries = []
         overall_state = "normal"
         priority = {"normal": 0, "sit": 1, "lie": 2, "fall": 3}
@@ -232,14 +242,35 @@ class Pipeline:
         for tid in self.active_ids:
             tr = self.tracks[tid]
             st = tr.out["state"]
+            since_s = float(tr.out.get("since", 0.0))
+
+            # Quan ly bo dem thoi gian nga -> Telegram cho tung nguoi doc lap
+            if st == "fall":
+                if tr.fall_wall_time is None:
+                    tr.fall_wall_time = time.strftime("%H:%M:%S - %d/%m/%Y")
+                    tr.telegram_sent = False
+                if since_s >= self.telegram_delay and not tr.telegram_sent:
+                    tr.telegram_sent = True
+                    telegram_triggers.append({
+                        "id": tid,
+                        "since": round(since_s, 1),
+                        "fall_time": tr.fall_wall_time,
+                    })
+                if tr.telegram_sent:
+                    any_telegram_sent = True
+            else:
+                # Neu nguoi do da thay doi trang thai (dung/ngoi day) truoc 10s -> huy bo dem
+                tr.fall_wall_time = None
+                tr.telegram_sent = False
+
             if priority[st] > priority[overall_state]:
                 overall_state = st
             if st == "fall":
                 fallen_ids.append(tid)
             if tr.out["alarm"] > max_alarm:
                 max_alarm = tr.out["alarm"]
-            if tr.out["since"] > max_since:
-                max_since = tr.out["since"]
+            if since_s > max_since:
+                max_since = since_s
             cand_key = (priority[st], float(tr.probs[3] + 0.5 * tr.probs[2]))
             if cand_key > best_key:
                 best_key = cand_key
@@ -248,6 +279,9 @@ class Pipeline:
                 "id": tid,
                 "state": st,
                 "alarm": tr.out["alarm"],
+                "since": round(since_s, 1),
+                "telegram_sent": tr.telegram_sent,
+                "fall_time": tr.fall_wall_time,
                 "warm": tr.warm,
                 "probs": [round(float(v), 3) for v in tr.probs],
             })
@@ -265,6 +299,8 @@ class Pipeline:
             since=max_since,
             fallen_ids=fallen_ids,
             persons=person_summaries,
+            telegram_sent=any_telegram_sent,
+            telegram_triggers=telegram_triggers,
         )
         return len(self.active_ids) > 0, any_warm
 
@@ -288,7 +324,7 @@ class Pipeline:
             cv2.rectangle(frame, (x1, y1), (x2, y2), col, thick)
             tag = f"ID {tid}: {st.upper()}"
             if st == "fall":
-                tag += f" ({tr.probs[3]:.2f})"
+                tag += f" {tr.out['since']:.1f}s"
             cv2.putText(frame, tag, (x1, max(18, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.55, col, 2)
 
         # Thanh trang thai tong o tren cung
@@ -303,10 +339,14 @@ class Pipeline:
             label = f"{st_all.upper()} | {n_ppl} NGUOI"
         if self.out["fallen_ids"]:
             ids_str = ",".join(str(i) for i in self.out["fallen_ids"])
-            label = f"FALL ALERT! ID [{ids_str}] ({self.out['since']:.0f}s)"
+            since_s = self.out["since"]
+            if self.out.get("telegram_sent"):
+                label = f"FALL ID[{ids_str}] ({since_s:.1f}s - DA GUI TELEGRAM)"
+            else:
+                label = f"FALL ID[{ids_str}] ({since_s:.1f}s / {self.telegram_delay:.0f}s -> Telegram)"
 
         cv2.rectangle(frame, (0, 0), (frame.shape[1], 64), (0, 0, 0), -1)
-        cv2.putText(frame, label, (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, col_all, 2)
+        cv2.putText(frame, label, (12, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.72, col_all, 2)
         txt = " ".join(f"{n}:{p:.2f}" for n, p in zip(CLASS_NAMES, self.probs))
         cv2.putText(frame, txt, (12, 54), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         if st_all == "fall":
@@ -346,13 +386,155 @@ class Esp32Sender:
 
 
 # ----------------------------------------------------------------------------
+class TelegramSender:
+    """
+    Gui tin nhan + anh chup hien truong qua Telegram Bot sau khi nguoi nga >= 10 giay
+    ma khong co dau hieu thay doi trang thai.
+    Tu dong phat hien chat_id khi nguoi than nhan '/start' vao bot (@PhatHienNguoiNga_bot).
+    """
+
+    def __init__(self, token, chat_ids=None, chats_file=TELEGRAM_CHATS_FILE):
+        self.token = (token or "").strip()
+        self.chats_file = Path(chats_file)
+        self.lock = threading.Lock()
+        self.chat_ids = set()
+        self.last_update_id = 0
+        self.q = queue.Queue(maxsize=16)
+
+        if chat_ids:
+            for cid in str(chat_ids).split(","):
+                cid = cid.strip()
+                if cid:
+                    self.chat_ids.add(str(cid))
+        self._load_saved_chats()
+
+        if self.token:
+            threading.Thread(target=self._poll_updates_loop, daemon=True).start()
+            threading.Thread(target=self._send_worker, daemon=True).start()
+            if self.chat_ids:
+                print(f">>> Telegram Bot SAN SANG (da luu {len(self.chat_ids)} chat_id: {', '.join(self.chat_ids)})")
+            else:
+                print(">>> Telegram Bot SAN SANG! Hay mo Telegram, tim @PhatHienNguoiNga_bot va bam Start (hoac nhan 1 tin bat ky) de tu dong dang ky nhan canh bao.")
+
+    def _load_saved_chats(self):
+        if self.chats_file.exists():
+            try:
+                data = json.loads(self.chats_file.read_text(encoding="utf-8"))
+                for cid in data.get("chat_ids", []):
+                    self.chat_ids.add(str(cid))
+            except Exception:
+                pass
+
+    def _save_chats(self):
+        try:
+            self.chats_file.write_text(
+                json.dumps({"chat_ids": sorted(self.chat_ids)}, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
+
+    def poll_once(self):
+        if not self.token:
+            return
+        try:
+            url = f"https://api.telegram.org/bot{self.token}/getUpdates"
+            params = {"timeout": 2}
+            if self.last_update_id:
+                params["offset"] = self.last_update_id + 1
+            r = requests.get(url, params=params, timeout=5.0).json()
+            if not r.get("ok"):
+                return
+            for upd in r.get("result", []):
+                self.last_update_id = max(self.last_update_id, int(upd.get("update_id", 0)))
+                msg = upd.get("message") or upd.get("channel_post") or {}
+                chat = msg.get("chat") or {}
+                cid = chat.get("id")
+                if cid is not None:
+                    cid_str = str(cid)
+                    with self.lock:
+                        is_new = cid_str not in self.chat_ids
+                        self.chat_ids.add(cid_str)
+                        if is_new:
+                            self._save_chats()
+                    text = (msg.get("text") or "").strip()
+                    if is_new or text.startswith("/start"):
+                        name = chat.get("first_name") or chat.get("title") or "ban"
+                        welcome = (
+                            f"✅ Xin chào {name}! Đã kết nối thành công với Hệ thống Phát hiện Té ngã AI v3.\n"
+                            f"🆔 Chat ID của bạn: {cid_str}\n"
+                            f"⏱️ Khi phát hiện có người ngã quá 10 giây không dậy, hệ thống sẽ tự động gửi ảnh hiện trường và thời gian ngã về đây."
+                        )
+                        requests.post(
+                            f"https://api.telegram.org/bot{self.token}/sendMessage",
+                            data={"chat_id": cid_str, "text": welcome},
+                            timeout=5.0,
+                        )
+                        print(f">>> [Telegram] Da dang ky nguoi nhan moi: {name} (chat_id={cid_str})")
+        except Exception:
+            pass
+
+    def _poll_updates_loop(self):
+        while True:
+            self.poll_once()
+            time.sleep(3.0)
+
+    def send_fall_alert(self, person_id, duration_s, fall_time_str, camera_src, jpg_bytes):
+        if not self.token:
+            return
+        caption = (
+            f"🚨 CẢNH BÁO KHẨN CẤP: PHÁT HIỆN NGƯỜI TÉ NGÃ!\n"
+            f"👤 Đối tượng: ID {person_id}\n"
+            f"🕒 Thời điểm bắt đầu ngã: {fall_time_str}\n"
+            f"⏱️ Thời gian nằm bất động: {duration_s:.1f} giây (không có dấu hiệu đứng dậy)\n"
+            f"📷 Nguồn camera: {camera_src}\n"
+            f"⚠️ Loa và đèn tại chỗ đã bật nhưng người ngã chưa tỉnh/dậy. Vui lòng kiểm tra ngay!"
+        )
+        try:
+            self.q.put_nowait((caption, jpg_bytes))
+        except queue.Full:
+            pass
+
+    def _send_worker(self):
+        while True:
+            caption, jpg_bytes = self.q.get()
+            self.poll_once()
+            with self.lock:
+                targets = list(self.chat_ids)
+            if not targets:
+                print(">>> [Telegram CANH BAO] Chua co chat_id nao! Hay mo Telegram nhan '/start' cho @PhatHienNguoiNga_bot")
+                continue
+            for cid in targets:
+                try:
+                    if jpg_bytes:
+                        resp = requests.post(
+                            f"https://api.telegram.org/bot{self.token}/sendPhoto",
+                            data={"chat_id": cid, "caption": caption},
+                            files={"photo": ("fall_alert.jpg", jpg_bytes, "image/jpeg")},
+                            timeout=10.0,
+                        )
+                    else:
+                        resp = requests.post(
+                            f"https://api.telegram.org/bot{self.token}/sendMessage",
+                            data={"chat_id": cid, "text": caption},
+                            timeout=10.0,
+                        )
+                    if resp.ok:
+                        print(f">>> [Telegram] Da gui CANH BAO + ANH NGA toi chat_id={cid}")
+                    else:
+                        print(f">>> [Telegram LOI] {resp.text}")
+                except Exception as e:
+                    print(f">>> [Telegram LOI KET NOI] {e}")
+
+
+# ----------------------------------------------------------------------------
 class Shared:
     def __init__(self):
         self.lock = threading.Lock()
         self.cond = threading.Condition(self.lock)
         self.jpeg = None
         self.status = dict(state="normal", alarm=0, fps=0.0, probs=[1, 0, 0, 0],
-                           camera="-", persons=[], fallen_ids=[])
+                           camera="-", persons=[], fallen_ids=[], since=0.0, telegram_sent=False)
         self.reset_req = False
         self.switch_req = None
 
@@ -369,8 +551,10 @@ def open_capture(src):
 
 def ai_thread(args, shared, device):
     pipe = Pipeline(args.model, args.weights, device,
-                    dict(fall_thr=args.fall_thr, fall_confirm=args.fall_confirm))
+                    dict(fall_thr=args.fall_thr, fall_confirm=args.fall_confirm),
+                    telegram_delay=args.telegram_delay)
     esp = Esp32Sender(args.esp32_ip)
+    tele = TelegramSender(args.telegram_token, args.telegram_chat_id)
     src = args.source
     cap = open_capture(src)
     print(f">>> Camera/video {src}: {'OK' if cap.isOpened() else 'KHONG MO DUOC'}")
@@ -410,17 +594,35 @@ def ai_thread(args, shared, device):
         fps = 0.9 * fps + 0.1 / max(now - prev, 1e-3)
         prev = now
         pipe.draw(frame, present, warm)
+
+        # 1. Phat tin hieu NGAY LAP TUC sang ESP32 de bat loa va den canh bao tai cho
         esp.send(pipe.out["state"])
+
+        ok, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 82])
+        jpg_bytes = jpg.tobytes() if ok else None
+
+        # 2. Neu nguoi nga nam bat dong >= telegram_delay (mac dinh 10s) ma khong thay doi trang thai -> gui Telegram kem anh + thoi gian nga
+        for trig in pipe.out.get("telegram_triggers", []):
+            tele.send_fall_alert(
+                person_id=trig["id"],
+                duration_s=trig["since"],
+                fall_time_str=trig["fall_time"],
+                camera_src=str(src),
+                jpg_bytes=jpg_bytes,
+            )
+
         if args.show:
             cv2.imshow("Fall Detection v3 Multi-Person (Nhan Q de thoat)", frame)
             if (cv2.waitKey(1) & 0xFF) in (ord("q"), ord("Q"), 27):
                 os._exit(0)
-        ok, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+
         with shared.cond:
-            shared.jpeg = jpg.tobytes()
+            shared.jpeg = jpg_bytes
             shared.status = dict(
                 state=pipe.out["state"],
                 alarm=pipe.out["alarm"],
+                since=round(float(pipe.out["since"]), 1),
+                telegram_sent=bool(pipe.out.get("telegram_sent", False)),
                 fps=round(fps, 1),
                 probs=[round(float(p), 3) for p in pipe.probs],
                 camera=str(src),
@@ -432,7 +634,7 @@ def ai_thread(args, shared, device):
 
 PAGE = """<!doctype html><meta charset=utf-8><title>Fall detection v3</title>
 <body style="background:#111827;color:#f3f4f6;font-family:sans-serif;text-align:center">
-<h2>Giám sát té ngã v3 (Đa người & Đa góc) — normal / sit / lie / fall</h2>
+<h2>Giám sát té ngã v3 (Đa người & Đa góc) — ESP32 + Telegram Alert (10s)</h2>
 <div id=banner style="margin:8px auto;padding:10px;max-width:720px;border-radius:8px;font-size:20px">...</div>
 <div id=plist style="margin:6px auto;max-width:720px;font-size:14px;color:#cbd5e1"></div>
 <img src="/video_feed" style="max-width:96%;border-radius:10px"><br><br>
@@ -443,8 +645,12 @@ PAGE = """<!doctype html><meta charset=utf-8><title>Fall detection v3</title>
 const C={normal:'#166534',sit:'#9a6700',lie:'#86198f',fall:'#b91c1c'};
 setInterval(()=>fetch('/status').then(r=>r.json()).then(s=>{
  const b=document.getElementById('banner');b.style.background=C[s.state];
- b.innerText=s.state.toUpperCase()+(s.fallen_ids&&s.fallen_ids.length?' [ID '+s.fallen_ids.join(',')+']':'')+(s.alarm==2?' — KHẨN CẤP':'')+'   ('+s.fps+' fps)';
- document.getElementById('plist').innerText='Theo dõi '+s.persons.length+' người: '+s.persons.map(p=>'ID'+p.id+':'+p.state.toUpperCase()).join(' | ');
+ let extra='';
+ if(s.fallen_ids&&s.fallen_ids.length){
+  extra=' [ID '+s.fallen_ids.join(',')+' — '+s.since+'s'+(s.telegram_sent?' — ĐÃ GỬI TELEGRAM':' / 10s chờ Telegram')+']';
+ }
+ b.innerText=s.state.toUpperCase()+extra+'   ('+s.fps+' fps)';
+ document.getElementById('plist').innerText='Theo dõi '+s.persons.length+' người: '+s.persons.map(p=>'ID'+p.id+':'+p.state.toUpperCase()+(p.state==='fall'?'('+p.since+'s)':'')).join(' | ');
 }),400);
 </script></body>"""
 
@@ -492,14 +698,16 @@ def make_app(shared):
 
 # ----------------------------------------------------------------------------
 def selftest(args, device):
-    """Chay dong bo tren video, thoi gian gia lap theo fps video -> in dong thoi gian trang thai."""
+    """Chay dong bo tren video, thoi gian gia lap theo fps video -> in dong thoi gian trang thai + su kien Telegram."""
     pipe = Pipeline(args.model, args.weights, device,
-                    dict(fall_thr=args.fall_thr, fall_confirm=args.fall_confirm))
+                    dict(fall_thr=args.fall_thr, fall_confirm=args.fall_confirm),
+                    telegram_delay=args.telegram_delay)
+    tele = TelegramSender(args.telegram_token, args.telegram_chat_id) if args.send_telegram_on_selftest else None
     cap = cv2.VideoCapture(args.selftest)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     if fps <= 1.0 or fps > 65.0:
         fps = 30.0
-    i, seg = 0, []
+    i, seg, tele_events = 0, [], []
     t0 = time.time()
     while True:
         ok, frame = cap.read()
@@ -511,11 +719,31 @@ def selftest(args, device):
         if not seg or seg[-1][2] != st:
             seg.append([t, t, st])
         seg[-1][1] = t
+        for trig in pipe.out.get("telegram_triggers", []):
+            tele_events.append((t, trig))
+            if tele is not None:
+                pipe.draw(frame, present, warm)
+                ok_jpg, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 82])
+                tele.send_fall_alert(
+                    person_id=trig["id"],
+                    duration_s=trig["since"],
+                    fall_time_str=trig["fall_time"],
+                    camera_src=str(args.selftest),
+                    jpg_bytes=jpg.tobytes() if ok_jpg else None,
+                )
         i += 1
     cap.release()
     print(f"{i} frame, {time.time() - t0:.1f}s xu ly")
     for a, b, st in seg:
         print(f"  {a:6.2f}s - {b:6.2f}s : {st}")
+    if tele_events:
+        for t_ev, trig in tele_events:
+            print(f"  >>> [TELEGRAM ALERT TRIGGERED at video t={t_ev:.2f}s] ID={trig['id']}, "
+                  f"nam bat dong={trig['since']}s (>= {args.telegram_delay}s), thoi diem nga={trig['fall_time']}")
+        if tele is not None:
+            time.sleep(2.5)
+    else:
+        print(f"  (Khong co dot nga nao keo dai >= {args.telegram_delay}s de gui Telegram)")
 
 
 def main():
@@ -524,6 +752,14 @@ def main():
     ap.add_argument("--model", type=Path, default=HERE / "models" / "fall_net_v3_lstm.pth")
     ap.add_argument("--weights", default=str(ROOT / "yolov8n-pose.pt"))
     ap.add_argument("--esp32-ip", default=os.environ.get("ESP32_IP", ""))
+    ap.add_argument("--telegram-token", default=os.environ.get("TELEGRAM_TOKEN", DEFAULT_TELEGRAM_TOKEN),
+                    help="HTTP API Token cua Telegram Bot")
+    ap.add_argument("--telegram-chat-id", default=os.environ.get("TELEGRAM_CHAT_ID", ""),
+                    help="Chat ID nguoi nhan (de trong se tu dong lay khi nguoi dung nhan /start cho Bot)")
+    ap.add_argument("--telegram-delay", type=float, default=10.0,
+                    help="So giay dem nguoc sau khi nga khong day truoc khi gui Telegram (mac dinh 10s)")
+    ap.add_argument("--send-telegram-on-selftest", action="store_true",
+                    help="Cho phep gui tin nhan Telegram that khi chay --selftest")
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=5000)
     ap.add_argument("--fall-thr", type=float, default=0.69)

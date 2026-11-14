@@ -635,9 +635,10 @@ class AlertStateMachine:
             self.posture = LIE
 
         cand = int(np.argmax(p[[NORMAL, SIT, LIE]]))          # 0/1/2 trung voi NORMAL/SIT/LIE
-        if self.latched_at is None and self.posture == LIE and cand == NORMAL and p[NORMAL] < 0.80:
-            cand = LIE
-        need_confirm = 2 if (cand == LIE and p[LIE] >= 0.55) else (6 if (self.latched_at is None and self.posture == LIE and cand == NORMAL) else self.posture_confirm)
+        if self.posture == LIE and cand == NORMAL:
+            if (self.latched_at is not None and box_ar >= 0.85) or p[NORMAL] < 0.80:
+                cand = LIE
+        need_confirm = 2 if (cand == LIE and p[LIE] >= 0.55) else (6 if (self.posture == LIE and cand == NORMAL) else self.posture_confirm)
         if cand == self.posture:
             self.cand_run = 0
         elif cand == self.cand:
@@ -648,7 +649,14 @@ class AlertStateMachine:
             self.cand, self.cand_run = cand, 1
 
         if self.latched_at is not None:
-            if self.posture in (NORMAL, SIT) and p[FALL] < 0.25 and p[LIE] < 0.35:
+            is_upright = (
+                self.posture in (NORMAL, SIT)
+                and box_ar < 0.85
+                and (p[NORMAL] + p[SIT]) >= 0.65
+                and p[FALL] < 0.20
+                and p[LIE] < 0.28
+            )
+            if is_upright:
                 if self.upright_since is None:
                     self.upright_since = t
                 if (t - self.upright_since) >= self.recover_s and (t - self.latched_at) >= self.min_hold_s:
