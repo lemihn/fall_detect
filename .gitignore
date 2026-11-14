@@ -15,6 +15,7 @@ __pycache__/
 *.pt
 *.pth
 !fall_pose_v2/models/*.pth
+!detect_v3/models/*.pth
 *.onnx
 *.h5
 *.tflite
@@ -27,6 +28,13 @@ fall_detect_new/
 fallvision_data/
 fall_pose_v2/cache/
 fall_pose_v2/fallvision_cache/
+detect_v3/cache/
+detect_v3/fallvision_cache/
+detect_v3/mc_cache/
+detect_v3/gmd_cache/
+detect_v3/external_data/
+detect_v3/own_data/
+Screenshot*.png
 videos/
 runs/
 outputs/
