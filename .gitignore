@@ -14,20 +14,24 @@ __pycache__/
 
 *.pt
 *.pth
-!fall_pose_v2/models/*.pth
-!detect_v3/models/*.pth
+!detect_v3/models/fall_net.pth
+!detect_v3/models/fall_net_v3_lstm.pth
 *.onnx
 *.h5
 *.tflite
 *.weights
+
+.agent/
+.antigravityignore
+fall_pose_v2/
+yolov8n-pose_ncnn_model/
+Bao_Cao_Qua_Trinh_Fall_Detection.ipynb
 
 dataset/
 datasets/
 data/
 fall_detect_new/
 fallvision_data/
-fall_pose_v2/cache/
-fall_pose_v2/fallvision_cache/
 detect_v3/cache/
 detect_v3/fallvision_cache/
 detect_v3/mc_cache/

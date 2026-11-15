@@ -1,157 +1,92 @@
-# Hệ Thống Phát Hiện Té Ngã 4 Trạng Thái (Fall Detection Pipeline)
+# Hệ Thống Phát Hiện Té Ngã Đa Người & Đa Góc (`detect_v3`)
 
-Hệ thống nhận diện tư thế và phát hiện té ngã thời gian thực phân loại **4 trạng thái** (`normal`, `sit`, `lie`, `fall`) kết hợp **YOLOv8-Pose**, mạng chuỗi thời gian **BiLSTM / Light Transformer**, tối ưu hóa **NCNN** cho Raspberry Pi và tích hợp cảnh báo phần cứng qua **ESP32** (màn hình TFT ST7735 1.8", còi báo động PWM 2 tông và đèn LED đỏ).
+Hệ thống nhận diện tư thế và phát hiện té ngã theo thời gian thực phân loại **4 trạng thái** (`normal`, `sit`, `lie`, `fall`) cho **nhiều người độc lập cùng lúc**, kết hợp **YOLOv8n-Pose**, mạng **BiLSTM (`FallNet`)**, **Web Dashboard**, cảnh báo phần cứng tức thì qua **ESP32** (còi, đèn LED, màn hình TFT) và gửi **ảnh hiện trường + thời gian ngã qua Telegram** sau 10 giây nếu người ngã chưa đứng dậy.
 
 ---
 
-## 1. Hướng dẫn Clone dự án về máy
+## 1. Cấu trúc Repository
 
-Repository này được cấu hình ở chế độ **Public (Read-Only đối với người ngoài)** — bạn có thể tự do tải (`git clone` / `git pull`) toàn bộ mã nguồn và trọng số mô hình về máy để sử dụng mà không lo ảnh hưởng đến nhánh chính (`main`).
+```text
+fall_detect/
+├── detect_v3/                        # Pipeline nhận diện, huấn luyện & chạy thực tế v3
+│   ├── fall_common.py                # Bộ lọc khớp xương, PoseTracker, đặc trưng 66 chiều, FallNet & AlertStateMachine
+│   ├── fall_data.py                  # Nạp đa nguồn dữ liệu, tạo cửa sổ 2s & chia tập không rò rỉ (Zero Leakage)
+│   ├── 1_extract_pose_cache.py       # Bước 1: Trích xuất khung xương YOLOv8-Pose ra .npz
+│   ├── 2_train.py                    # Bước 2: Huấn luyện mô hình 4 lớp (BiLSTM + Hard-Negative Mining)
+│   ├── 3_evaluate.py                 # Bước 3: Đánh giá theo cửa sổ & mức sự kiện
+│   ├── 4_realtime.py                 # Bước 4: Chạy thực tế (Camera/Video + Web Dashboard + ESP32 + Telegram)
+│   ├── verify_v3.py                  # Kiểm chứng đa góc camera & đa người đồng thời
+│   ├── record_samples.py             # Thu thập thêm mẫu qua Webcam
+│   ├── import_own_videos.py          # Import video tự quay (.mp4/.avi) để huấn luyện bổ sung
+│   ├── download_fallvision.py        # Tải keypoints CSV bộ FallVision
+│   ├── convert_fallvision_to_cache.py# Chuyển đổi FallVision CSV sang .npz
+│   ├── prepare_multicam_data.py      # Chuẩn bị dữ liệu Multiple Cameras Fall (8 góc trần)
+│   ├── prepare_gmdcsa24_data.py      # Chuẩn bị dữ liệu GMDCSA24 (đa góc & che khuất)
+│   ├── prepare_cctv_data.py          # Chuẩn bị dữ liệu Simuletic CCTV góc cao
+│   ├── telegram_chats.json           # Lưu danh sách chat_id nhận cảnh báo Telegram
+│   └── models/
+│       ├── fall_net_v3_lstm.pth      # Trọng số mô hình BiLSTM dùng cho 4_realtime.py & verify_v3.py
+│       └── fall_net.pth              # Trọng số mô hình BiLSTM chuẩn (mặc định cho 2_train.py / 3_evaluate.py)
+├── TEST_GIAO_DIEN/
+│   └── TEST_GIAO_DIEN.ino            # Firmware ESP32 (WebServer :80, còi báo động, LED, TFT ST7735, SIM)
+└── scripts/
+    └── check_env.py                  # Kiểm tra PyTorch/CUDA, OpenCV và kết nối Camera
+```
 
-Mở **Terminal / PowerShell / Command Prompt** tại thư mục bạn muốn lưu dự án và chạy:
+---
+
+## 2. Cài đặt môi trường
 
 ```bash
 git clone https://github.com/lemihn/fall_detect.git
 cd fall_detect
-```
 
-Khi muốn cập nhật phiên bản code mới nhất từ repository:
-
-```bash
-git pull origin main
-```
-
----
-
-## 2. Cài đặt môi trường (Python Virtual Environment)
-
-Khuyến nghị sử dụng **Python 3.10 – 3.12** và tạo môi trường ảo (`venv`) riêng biệt cho dự án.
-
-### Trên Windows (PowerShell):
-
-```powershell
-# 1. Tạo môi trường ảo .venv
-python -m venv .venv
-
-# 2. Kích hoạt môi trường ảo
-.\.venv\Scripts\Activate.ps1
-
-# 3. Nâng cấp pip và cài đặt các thư viện cần thiết
-python -m pip install --upgrade pip
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
-pip install ultralytics opencv-python numpy flask requests ncnn
-```
-
-> **Lưu ý**: Nếu máy không có GPU NVIDIA (chỉ chạy CPU hoặc trên Raspberry Pi), bạn có thể cài PyTorch bản CPU bằng lệnh:
-> ```bash
-> pip install torch torchvision
-> pip install ultralytics opencv-python numpy flask requests ncnn
-> ```
-
-### Trên Linux / Raspberry Pi / macOS:
-
-```bash
 python3 -m venv .venv
+# Linux / Raspberry Pi:
 source .venv/bin/activate
+# Windows PowerShell:
+# .\.venv\Scripts\Activate.ps1
+
 pip install --upgrade pip
-pip install torch torchvision ultralytics opencv-python numpy flask requests ncnn
+pip install torch ultralytics opencv-python numpy flask requests
 ```
 
-### Kiểm tra môi trường và Camera:
-
-Sau khi cài đặt xong, chạy script kiểm tra nhanh PyTorch/CUDA và kết nối Webcam:
-
+Kiểm tra nhanh môi trường & camera:
 ```bash
 python scripts/check_env.py
 ```
 
 ---
 
-## 3. Cấu trúc thư mục chính
+## 3. Chạy thực tế trên PC / Raspberry Pi
 
-```text
-fall_detect/
-├── fall_pose_v2/                     # Pipeline nhận diện & huấn luyện mô hình 4 trạng thái
-│   ├── fall_common.py                # Kiến trúc mạng (FallNet BiLSTM, FallTransformer), trích xuất 89 đặc trưng & AlertStateMachine
-│   ├── fall_data.py                  # Xử lý dữ liệu chuỗi thời gian & chia tập chống rò rỉ dữ liệu (Group Split)
-│   ├── 1_extract_pose_cache.py       # Bước 1: Trích xuất khung xương YOLOv8-Pose ra cache (.npz)
-│   ├── 2_train.py                    # Bước 2: Huấn luyện mô hình 4 lớp (normal / sit / lie / fall)
-│   ├── 3_evaluate.py                 # Bước 3: Đánh giá mô hình ở mức cửa sổ (Window) & mức sự kiện (Event)
-│   ├── 4_realtime.py                 # Bước 4: Chạy thực tế qua Webcam/Video + Web Dashboard + gửi cảnh báo ESP32
-│   ├── record_samples.py             # Công cụ tự thu thập thêm mẫu dữ liệu từ webcam
-│   └── models/
-│       └── fall_net.pth              # Trọng số mô hình phân loại chuỗi tư thế đã huấn luyện sẵn
-├── yolov8n-pose_ncnn_model/          # Mô hình YOLOv8n-Pose đã xuất sang định dạng NCNN (tối ưu cho Raspberry Pi)
-├── TEST_GIAO_DIEN/
-│   └── TEST_GIAO_DIEN.ino            # Firmware Arduino/ESP32 điều khiển màn hình TFT ST7735, còi báo động & LED
-├── scripts/
-│   └── check_env.py                  # Script kiểm tra môi trường PyTorch, GPU CUDA và Camera
-└── Bao_Cao_Qua_Trinh_Fall_Detection.ipynb  # Báo cáo chi tiết toàn bộ quy trình nghiên cứu, thực nghiệm & tối ưu
+> Lần chạy đầu cần có Internet để Ultralytics tự tải `yolov8n-pose.pt` (hoặc đặt sẵn `yolov8n-pose.pt` tại thư mục gốc `fall_detect/`).
+
+```bash
+# Chạy với camera mặc định (index 0) + kết nối ESP32 + Web Dashboard (:5000)
+python3 detect_v3/4_realtime.py --source 0 --esp32-ip 192.168.1.108
+
+# Trên PC muốn bật thêm cửa sổ OpenCV trực tiếp:
+python detect_v3/4_realtime.py --source 0 --esp32-ip 192.168.1.108 --show
+
+# Chạy thử trên file video có sẵn (giới hạn kích thước hiển thị 640px):
+python detect_v3/4_realtime.py --source path/to/video.mp4 --max-size 640 --show
 ```
+
+### Luồng cảnh báo 2 tầng
+1. **Ngay lập tức (`0s`):** Gửi HTTP `GET /set?state=fall` sang ESP32 để bật còi và đèn đỏ tại chỗ.
+2. **Sau `10s` (`--telegram-delay 10`):** Nếu người ngã vẫn nằm bất động chưa đứng/ngồi dậy, hệ thống tự động chụp **ảnh gốc từ camera** kèm **thời điểm ngã** gửi về ứng dụng Telegram qua Bot.
 
 ---
 
-## 4. Hướng dẫn sử dụng nhanh
+## 4. Tự thêm video quay thực tế & Huấn luyện lại (Tùy chọn)
 
-Trọng số mô hình đã được đóng gói sẵn tại `fall_pose_v2/models/fall_net.pth` (và model NCNN tại `yolov8n-pose_ncnn_model/`), bạn có thể chạy nhận diện ngay sau khi clone về mà không bắt buộc phải huấn luyện lại.
-
-### 4.1. Chạy nhận diện thời gian thực (Webcam + Web Dashboard)
-
+1. Bỏ các video `.mp4` tự quay vào các thư mục con tương ứng trong `detect_v3/own_videos/{normal,sit,lie,fall}/`.
+2. Chạy lệnh import và huấn luyện lại:
 ```bash
-# Chạy với webcam mặc định (source 0) và mở giao diện Web tại http://127.0.0.1:5000
-python fall_pose_v2/4_realtime.py --source 0
-
-# Hoặc hiển thị trực tiếp cửa sổ OpenCV kèm Web Dashboard
-python fall_pose_v2/4_realtime.py --source 0 --show
+python detect_v3/import_own_videos.py --retrain
 ```
-
-Sau khi chạy, mở trình duyệt truy cập **`http://127.0.0.1:5000`** để xem luồng video trực tiếp, xác suất 4 trạng thái (`normal`, `sit`, `lie`, `fall`) và trạng thái báo động.
-
-### 4.2. Chạy thử trên file Video có sẵn
-
+3. Kiểm chứng toàn diện mô hình:
 ```bash
-# Chạy kèm Web Dashboard với đầu vào là file video
-python fall_pose_v2/4_realtime.py --source duong_dan_video.mp4
-
-# Chế độ selftest (chạy nhanh không cần GUI, in ra dòng thời gian các trạng thái phát hiện được)
-python fall_pose_v2/4_realtime.py --selftest duong_dan_video.mp4
+python detect_v3/verify_v3.py
 ```
-
-### 4.3. Kết nối với mạch cảnh báo ESP32 qua Wi-Fi
-
-1. Mở file `TEST_GIAO_DIEN/TEST_GIAO_DIEN.ino` bằng **Arduino IDE**, chỉnh lại thông tin Wi-Fi (`ssid`, `password`) và nạp vào mạch **ESP32**.
-2. Xem địa chỉ IP của ESP32 trên Serial Monitor (hoặc trên màn hình TFT ST7735).
-3. Chạy chương trình nhận diện kèm tham số `--esp32-ip`:
-
-```bash
-python fall_pose_v2/4_realtime.py --source 0 --esp32-ip 192.168.1.25
-```
-
----
-
-## 5. Huấn luyện và đánh giá lại mô hình (Tùy chọn)
-
-Nếu bạn có tập dữ liệu mới và muốn chạy lại toàn bộ pipeline huấn luyện:
-
-```bash
-# Bước 1: Trích xuất đặc trưng khung xương từ ảnh/video sang cache
-python fall_pose_v2/1_extract_pose_cache.py
-
-# Bước 2: Huấn luyện mô hình (tự động lưu model tốt nhất vào fall_pose_v2/models/fall_net.pth)
-python fall_pose_v2/2_train.py
-
-# Bước 3: Đánh giá độ chính xác (Confusion Matrix & kiểm tra báo động giả / độ trễ phát hiện)
-python fall_pose_v2/3_evaluate.py
-```
-
-Để xem giải thích chi tiết về toán học, cách trích xuất 89 đặc trưng hình học khung xương, thiết kế máy trạng thái chống báo động giả (`AlertStateMachine`) và kết quả thực nghiệm, vui lòng mở file notebook **`Bao_Cao_Qua_Trinh_Fall_Detection.ipynb`**.
-
----
-
-## 6. Quy định đóng góp (Dành cho đồng nghiệp)
-
-- Nhánh `main` đã được bật **Branch Protection (Read-Only đối với bên ngoài)** để đảm bảo tính ổn định của mã nguồn.
-- Nếu bạn muốn đề xuất chỉnh sửa hoặc thêm tính năng:
-  1. Nhấn nút **Fork** trên góc phải giao diện GitHub để tạo bản sao về tài khoản của bạn.
-  2. Tạo nhánh mới (`git checkout -b feature/ten-tinh-nang`), thực hiện thay đổi và commit.
-  3. Tạo **Pull Request** gửi về nhánh `main` của repository này để chủ sở hữu duyệt và gộp code.
