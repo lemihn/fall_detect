@@ -1,0 +1,18 @@
+# Tu dong chay dashboard agent khi Pi khoi dong.
+# Sua User va duong dan cho dung voi Pi cua ban (xem dashboard_agent/README.md).
+[Unit]
+Description=Fall detection dashboard agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/fall_detect
+ExecStart=/home/pi/fall_detect/.venv/bin/python dashboard_agent/agent.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
