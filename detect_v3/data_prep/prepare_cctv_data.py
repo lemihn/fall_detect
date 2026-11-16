@@ -4,13 +4,16 @@ into static 45-frame sequences in detect_v3/own_data/ so the model learns
 overhead/elevated CCTV postures (laying -> LIE, standing -> NORMAL).
 """
 from pathlib import Path
+import sys
 import numpy as np
 
+HERE = Path(__file__).resolve().parent
+V3_ROOT = HERE.parent
+sys.path.insert(0, str(V3_ROOT / "model"))
 from fall_common import LIE, NORMAL
 
-HERE = Path(__file__).resolve().parent
-LBL_DIR = HERE / "external_data" / "cctv_incident" / "laying_dataset" / "labels"
-OUT_DIR = HERE / "own_data"
+LBL_DIR = V3_ROOT / "data" / "external_data" / "cctv_incident" / "laying_dataset" / "labels"
+OUT_DIR = V3_ROOT / "data" / "own_data"
 W, H = 1024, 1024
 T = 45  # 1.5s at 30fps
 

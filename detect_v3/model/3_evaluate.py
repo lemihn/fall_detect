@@ -22,7 +22,9 @@ from fall_data import (FIRST_END, WindowDataset, confusion, load_sequences, make
                        predict, report, split_seqs, window_indices)
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent
+V3_ROOT = HERE.parent
+ROOT = V3_ROOT.parent
+DATA_DIR = V3_ROOT / "data"
 
 
 def sequence_probs(model, s, device):
@@ -49,10 +51,10 @@ def simulate(model, s, device, sm_kwargs):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", type=Path, default=HERE / "models" / "fall_net.pth")
-    ap.add_argument("--cache", type=Path, default=HERE / "cache")
+    ap.add_argument("--model", type=Path, default=HERE / "weights" / "fall_net.pth")
+    ap.add_argument("--cache", type=Path, default=DATA_DIR / "cache")
     ap.add_argument("--labels", type=Path, default=ROOT / "fall_detect_new" / "labels" / "train")
-    ap.add_argument("--own", type=Path, default=HERE / "own_data")
+    ap.add_argument("--own", type=Path, default=DATA_DIR / "own_data")
     ap.add_argument("--all", action="store_true")
     ap.add_argument("--fall-thr", type=float, default=0.75)
     ap.add_argument("--fall-confirm", type=int, default=3)

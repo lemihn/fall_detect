@@ -15,18 +15,21 @@ import numpy as np
 import cv2
 from ultralytics import YOLO
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from fall_common import YOLO_IMGSZ, pick_from_result  # noqa: E402
-
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent
+V3_ROOT = HERE.parent
+ROOT = V3_ROOT.parent
+DATA_DIR = V3_ROOT / "data"
+MODEL_DIR = V3_ROOT / "model"
+
+sys.path.insert(0, str(MODEL_DIR))
+from fall_common import YOLO_IMGSZ, pick_from_result  # noqa: E402
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--images", type=Path, default=ROOT / "fall_detect_new" / "images" / "train")
-    ap.add_argument("--out", type=Path, default=HERE / "cache")
-    ap.add_argument("--weights", default=str(ROOT / "yolov8n-pose.pt"))
+    ap.add_argument("--out", type=Path, default=DATA_DIR / "cache")
+    ap.add_argument("--weights", default=str(MODEL_DIR / "yolov8n-pose.pt"))
     ap.add_argument("--batch", type=int, default=16)
     ap.add_argument("--only", default=None, help="chi xu ly chuoi co ten chua chuoi nay (de test)")
     args = ap.parse_args()

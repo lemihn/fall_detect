@@ -30,7 +30,9 @@ from fall_common import (CLASS_NAMES, GRID_HZ, INFER_CONF, INFER_IMGSZ, SEQ_STEP
                          window_features)
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent
+V3_ROOT = HERE.parent
+ROOT = V3_ROOT.parent
+RESULT_DIR = V3_ROOT / "result"
 WARMUP_S = 1.0          # toi thieu 1 giay lich su de tranh bao gia do lap frame dau video
 STALE_S = 0.35          # mau cu hon nguong nay coi nhu "khong co nguoi"
 TRACK_TTL_S = 2.5       # xoa track neu nguoi binh thuong roi khoi khung hinh qua 2.5s
@@ -740,12 +742,18 @@ def selftest(args, device):
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     if fps <= 1.0 or fps > 65.0:
         fps = 30.0
+    writer = None
+    out_vid_path = None
+    if args.save_result:
+        RESULT_DIR.mkdir(parents=True, exist_ok=True)
+        out_vid_path = RESULT_DIR / f"{Path(args.selftest).stem}_result.mp4"
     i, seg, tele_events = 0, [], []
     t0 = time.time()
     while True:
         ok, frame = cap.read()
         if not ok:
             break
+        frame = resize_input_frame(frame, args.max_size)
         t = i / fps
         present, warm = pipe.process(frame, t)
         st = pipe.out["state"] if warm else "warmup"
@@ -763,8 +771,17 @@ def selftest(args, device):
                     camera_src=str(args.selftest),
                     jpg_bytes=jpg.tobytes() if ok_jpg else None,
                 )
+        if args.save_result:
+            pipe.draw(frame, present, warm)
+            if writer is None:
+                h, w = frame.shape[:2]
+                writer = cv2.VideoWriter(str(out_vid_path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
+            writer.write(frame)
         i += 1
     cap.release()
+    if writer is not None:
+        writer.release()
+        print(f">>> Da luu video ket qua tai: {out_vid_path}")
     print(f"{i} frame, {time.time() - t0:.1f}s xu ly")
     for a, b, st in seg:
         print(f"  {a:6.2f}s - {b:6.2f}s : {st}")
@@ -781,8 +798,8 @@ def selftest(args, device):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", default="0", help="so (webcam) hoac duong dan video / URL")
-    ap.add_argument("--model", type=Path, default=HERE / "models" / "fall_net_v3_lstm.pth")
-    ap.add_argument("--weights", default=str(ROOT / "yolov8n-pose.pt"))
+    ap.add_argument("--model", type=Path, default=HERE / "weights" / "fall_net_v3_lstm.pth")
+    ap.add_argument("--weights", default=str(HERE / "yolov8n-pose.pt"))
     ap.add_argument("--esp32-ip", default=os.environ.get("ESP32_IP", ""))
     ap.add_argument("--telegram-token", default=os.environ.get("TELEGRAM_TOKEN", DEFAULT_TELEGRAM_TOKEN),
                     help="HTTP API Token cua Telegram Bot")
@@ -800,9 +817,11 @@ def main():
                     help="Gioi han chieu dai/rong lon nhat cua video dau vao (mac dinh 640px, dat 0 neu muon giu nguyen goc)")
     ap.add_argument("--show", action="store_true", help="hien cua so video OpenCV truc tiep")
     ap.add_argument("--selftest", default=None)
+    ap.add_argument("--save-result", action="store_true", help="luu video ket qua sau khi test vao detect_v3/result/")
     args = ap.parse_args()
     if not Path(args.weights).exists():
-        args.weights = "yolov8n-pose.pt"
+        alt_w = ROOT / "yolov8n-pose.pt"
+        args.weights = str(alt_w) if alt_w.exists() else "yolov8n-pose.pt"
     args.source = int(args.source) if str(args.source).isdigit() else args.source
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
