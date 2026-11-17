@@ -14,8 +14,8 @@ __pycache__/
 
 *.pt
 *.pth
-!detect_v3/models/fall_net.pth
-!detect_v3/models/fall_net_v3_lstm.pth
+!detect_v3/model/weights/fall_net.pth
+!detect_v3/model/weights/fall_net_v3_lstm.pth
 *.onnx
 *.h5
 *.tflite
@@ -26,20 +26,20 @@ __pycache__/
 fall_pose_v2/
 yolov8n-pose_ncnn_model/
 Bao_Cao_Qua_Trinh_Fall_Detection.ipynb
+Bao_Cao_Du_An_Phat_Hien_Te_Nga.pdf
+Fall_Detection_A_to_Z.ipynb
 
 dataset/
 datasets/
-data/
+/data/
 fall_detect_new/
 fallvision_data/
-detect_v3/cache/
-detect_v3/fallvision_cache/
-detect_v3/mc_cache/
-detect_v3/gmd_cache/
-detect_v3/external_data/
-detect_v3/own_data/
-detect_v3/own_videos/
-detect_v3/detect_v3/
+detect_v3/data/*
+!detect_v3/data/.gitkeep
+detect_v3/test/*
+!detect_v3/test/.gitkeep
+detect_v3/result/*.mp4
+detect_v3/result/Screenshot*.png
 Screenshot*.png
 videos/
 runs/

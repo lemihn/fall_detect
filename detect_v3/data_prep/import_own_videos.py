@@ -22,11 +22,14 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from fall_common import FALL, LIE, NORMAL, SIT, SRC_FPS, YOLO_IMGSZ, pick_from_result  # noqa: E402
-
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent
+V3_ROOT = HERE.parent
+ROOT = V3_ROOT.parent
+MODEL_DIR = V3_ROOT / "model"
+DATA_DIR = V3_ROOT / "data"
+
+sys.path.insert(0, str(MODEL_DIR))
+from fall_common import FALL, LIE, NORMAL, SIT, SRC_FPS, YOLO_IMGSZ, pick_from_result  # noqa: E402
 CLASS_MAP = {"normal": NORMAL, "sit": SIT, "lie": LIE, "fall": FALL}
 VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
 
@@ -103,13 +106,13 @@ def convert_video_to_npz(video_path: Path, label_name: str, out_dir: Path, pose:
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--in-dir", type=Path, default=HERE / "own_videos",
+    ap.add_argument("--in-dir", type=Path, default=DATA_DIR / "own_videos",
                     help="Thu muc chua cac thu muc con normal/ sit/ lie/ fall/")
-    ap.add_argument("--out-dir", type=Path, default=HERE / "own_data")
+    ap.add_argument("--out-dir", type=Path, default=DATA_DIR / "own_data")
     ap.add_argument("--label", choices=["normal", "sit", "lie", "fall"], default="sit",
                     help="Nhan ap dung khi truyen --files truc tiep")
     ap.add_argument("--files", nargs="*", default=[], help="Danh sach duong dan video cu the")
-    ap.add_argument("--weights", default=str(ROOT / "yolov8n-pose.pt"))
+    ap.add_argument("--weights", default=str(MODEL_DIR / "yolov8n-pose.pt"))
     ap.add_argument("--retrain", action="store_true", help="Tu dong huan luyen lai model sau khi import")
     args = ap.parse_args()
 
@@ -151,15 +154,15 @@ def main():
         print("\n>>> Bat dau huan luyen lai model voi du lieu moi...")
         cmd = [
             sys.executable,
-            str(HERE / "2_train.py"),
+            str(MODEL_DIR / "2_train.py"),
             "--use-fv", "--use-mc", "--use-gmd", "--hnm",
-            "--out", str(HERE / "models" / "fall_net_v3_lstm.pth"),
+            "--out", str(MODEL_DIR / "weights" / "fall_net_v3_lstm.pth"),
         ]
         subprocess.run(cmd, check=True)
         # Dong bo sang fall_net.pth
         import shutil
-        shutil.copy2(HERE / "models" / "fall_net_v3_lstm.pth", HERE / "models" / "fall_net.pth")
-        print(">>> Da cap nhat model moi vao detect_v3/models/fall_net_v3_lstm.pth va fall_net.pth!")
+        shutil.copy2(MODEL_DIR / "weights" / "fall_net_v3_lstm.pth", MODEL_DIR / "weights" / "fall_net.pth")
+        print(">>> Da cap nhat model moi vao detect_v3/model/weights/fall_net_v3_lstm.pth va fall_net.pth!")
 
 
 if __name__ == "__main__":

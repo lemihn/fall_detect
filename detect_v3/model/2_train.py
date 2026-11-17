@@ -21,17 +21,19 @@ from fall_data import (WindowDataset, class_counts, confusion, load_sequences,  
                        make_frozen_items, make_items, predict, report, split_seqs)
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent
+V3_ROOT = HERE.parent
+ROOT = V3_ROOT.parent
+DATA_DIR = V3_ROOT / "data"
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cache", type=Path, default=HERE / "cache")
+    ap.add_argument("--cache", type=Path, default=DATA_DIR / "cache")
     ap.add_argument("--labels", type=Path, default=ROOT / "fall_detect_new" / "labels" / "train")
-    ap.add_argument("--own", type=Path, default=HERE / "own_data")
-    ap.add_argument("--fv", type=Path, default=HERE / "fallvision_cache")
-    ap.add_argument("--mc", type=Path, default=HERE / "mc_cache")
-    ap.add_argument("--gmd", type=Path, default=HERE / "gmd_cache")
+    ap.add_argument("--own", type=Path, default=DATA_DIR / "own_data")
+    ap.add_argument("--fv", type=Path, default=DATA_DIR / "fallvision_cache")
+    ap.add_argument("--mc", type=Path, default=DATA_DIR / "mc_cache")
+    ap.add_argument("--gmd", type=Path, default=DATA_DIR / "gmd_cache")
     ap.add_argument("--use-fv", action="store_true", help="dung dataset FallVision 5.683 chuoi")
     ap.add_argument("--use-mc", action="store_true", help="dung dataset Multiple Cameras Fall 192 chuoi")
     ap.add_argument("--use-gmd", action="store_true", help="dung dataset GMDCSA24 160 chuoi")
@@ -39,7 +41,7 @@ def main():
     ap.add_argument("--hidden", type=int, default=96)
     ap.add_argument("--drop", type=float, default=0.30)
     ap.add_argument("--hnm", action="store_true", help="bat Hard-Negative Mining giua qua trinh train")
-    ap.add_argument("--out", type=Path, default=HERE / "models" / "fall_net.pth")
+    ap.add_argument("--out", type=Path, default=HERE / "weights" / "fall_net.pth")
     ap.add_argument("--epochs", type=int, default=30)
     ap.add_argument("--per-epoch", type=int, default=3000)
     ap.add_argument("--batch", type=int, default=64)

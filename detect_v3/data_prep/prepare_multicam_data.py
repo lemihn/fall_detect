@@ -3,6 +3,7 @@ Extract Multiple Cameras Fall Dataset (24 scenarios x 8 elevated ceiling-edge ca
 and convert to .npz pose cache in detect_v3/mc_cache/ using YOLOv8n-Pose.
 """
 import csv
+import sys
 import zipfile
 from collections import defaultdict
 from pathlib import Path
@@ -11,13 +12,16 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
+HERE = Path(__file__).resolve().parent
+V3_ROOT = HERE.parent
+ROOT = V3_ROOT.parent
+MODEL_DIR = V3_ROOT / "model"
+sys.path.insert(0, str(MODEL_DIR))
 from fall_common import FALL, IGNORE, LIE, NORMAL, YOLO_IMGSZ, pick_from_result
 
-HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent
-ZIP_PATH = HERE / "external_data" / "multiple_cameras_fall.zip"
-EXT_DIR = HERE / "external_data" / "multiple_cameras_fall"
-OUT_DIR = HERE / "mc_cache"
+ZIP_PATH = V3_ROOT / "data" / "external_data" / "multiple_cameras_fall.zip"
+EXT_DIR = V3_ROOT / "data" / "external_data" / "multiple_cameras_fall"
+OUT_DIR = V3_ROOT / "data" / "mc_cache"
 
 
 def find_file(base: Path, name: str):
@@ -51,7 +55,9 @@ def main():
         raise FileNotFoundError("data_tuple3.csv not found inside extracted dataset")
     ann = load_annotations(csv_path)
 
-    weights = ROOT / "yolov8n-pose.pt"
+    weights = MODEL_DIR / "yolov8n-pose.pt"
+    if not weights.exists():
+        weights = ROOT / "yolov8n-pose.pt"
     pose = YOLO(str(weights))
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 

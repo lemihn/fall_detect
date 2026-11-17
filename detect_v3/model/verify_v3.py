@@ -16,7 +16,10 @@ import torch
 from torch.utils.data import DataLoader
 
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent
+V3_ROOT = HERE.parent
+ROOT = V3_ROOT.parent
+DATA_DIR = V3_ROOT / "data"
+TEST_DIR = V3_ROOT / "test"
 sys.path.insert(0, str(HERE))
 
 from fall_common import CLASS_NAMES, FALL, load_model  # noqa: E402
@@ -35,12 +38,12 @@ def eval_validation_metrics(model_path: Path, device):
     print(f"Model: {model_path.name} | arch={ck.get('arch')} | val_macro_f1_ckpt={ck.get('val_macro_f1', 0):.4f}", flush=True)
 
     seqs = load_sequences(
-        HERE / "cache",
+        DATA_DIR / "cache",
         ROOT / "fall_detect_new" / "labels" / "train",
-        HERE / "own_data",
-        fv_dir=HERE / "fallvision_cache",
-        mc_dir=HERE / "mc_cache",
-        gmd_dir=HERE / "gmd_cache",
+        DATA_DIR / "own_data",
+        fv_dir=DATA_DIR / "fallvision_cache",
+        mc_dir=DATA_DIR / "mc_cache",
+        gmd_dir=DATA_DIR / "gmd_cache",
         verbose=False,
     )
     _, va_seqs = split_seqs(seqs, "fixed")
@@ -110,9 +113,9 @@ def eval_real_videos(model_path: Path, device, fall_thr: float, fall_confirm: in
     print("\n" + "=" * 70, flush=True)
     print(f"2. KIEM THU PIPELINE THUC TE TREN VIDEO [thr={fall_thr}, confirm={fall_confirm}]", flush=True)
     print("=" * 70, flush=True)
-    weights = str(ROOT / "yolov8n-pose.pt")
-    mc_root = HERE / "external_data" / "multiple_cameras_fall"
-    gmd_s4 = HERE / "external_data" / "gmdcsa24" / "GMDCSA24-A-Dataset-for-Human-Fall-Detection-in-Videos-master" / "Subject 4"
+    weights = str(HERE / "yolov8n-pose.pt") if (HERE / "yolov8n-pose.pt").exists() else str(ROOT / "yolov8n-pose.pt")
+    mc_root = DATA_DIR / "external_data" / "multiple_cameras_fall"
+    gmd_s4 = DATA_DIR / "external_data" / "gmdcsa24" / "GMDCSA24-A-Dataset-for-Human-Fall-Detection-in-Videos-master" / "Subject 4"
 
     # A. Multiple Cameras Fall chute04 (nga that tren 8 goc cam)
     fall_avis = sorted(mc_root.rglob("chute04/cam*.avi"))
@@ -151,7 +154,7 @@ def eval_real_videos(model_path: Path, device, fall_thr: float, fall_confirm: in
         print(f"  ADL/{vp.name}: {'FALSE ALARM!' if fa else 'OK (NO FALL)'} (fall_frames={f_f}/{n_f})", flush=True)
 
     # D. Video chuan 03.mp4
-    v03 = HERE / "03.mp4"
+    v03 = TEST_DIR / "03.mp4"
     if v03.exists():
         n_f, f_f, _ = run_video_pipeline(model_path, weights, device, v03, fall_thr, fall_confirm)
         print(f"\n[D] Video chuan 03.mp4: {'DETECTED FALL' if f_f > 0 else 'MISSED'} (fall_frames={f_f}/{n_f})", flush=True)
@@ -165,9 +168,9 @@ def eval_multiperson(model_path: Path, device, fall_thr: float, fall_confirm: in
     print("\n" + "=" * 70, flush=True)
     print("3. KIEM THU DA NGUOI DONG THOI (2-3 NGUOI) & TRANG THAI DOC LAP TUNG NGUOI", flush=True)
     print("=" * 70, flush=True)
-    weights = str(ROOT / "yolov8n-pose.pt")
-    gmd_s4 = HERE / "external_data" / "gmdcsa24" / "GMDCSA24-A-Dataset-for-Human-Fall-Detection-in-Videos-master" / "Subject 4"
-    v_fall = HERE / "03.mp4"
+    weights = str(HERE / "yolov8n-pose.pt") if (HERE / "yolov8n-pose.pt").exists() else str(ROOT / "yolov8n-pose.pt")
+    gmd_s4 = DATA_DIR / "external_data" / "gmdcsa24" / "GMDCSA24-A-Dataset-for-Human-Fall-Detection-in-Videos-master" / "Subject 4"
+    v_fall = TEST_DIR / "03.mp4"
     v_adl1 = gmd_s4 / "ADL" / "08.mp4"   # nguoi di bo binh thuong
     v_adl2 = gmd_s4 / "ADL" / "11.mp4"   # nguoi ngoi ban doc/viet
 
@@ -220,7 +223,7 @@ def eval_multiperson(model_path: Path, device, fall_thr: float, fall_confirm: in
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", type=Path, default=HERE / "models" / "fall_net_v3_lstm.pth")
+    ap.add_argument("--model", type=Path, default=HERE / "weights" / "fall_net_v3_lstm.pth")
     ap.add_argument("--fall-thr", type=float, default=0.69)
     ap.add_argument("--fall-confirm", type=int, default=4)
     ap.add_argument("--skip-videos", action="store_true")

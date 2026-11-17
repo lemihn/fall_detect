@@ -10,9 +10,10 @@ import numpy as np
 import pandas as pd
 from concurrent.futures import ProcessPoolExecutor
 
-ROOT = Path(r"d:\Education_Material\Addition\SMLab\DO_AN")
+ROOT = Path(__file__).resolve().parents[2]
+V3_ROOT = Path(__file__).resolve().parents[1]
 SRC_DIR = ROOT / "fallvision_data" / "csv_files"
-OUT_DIR = ROOT / "fall_pose_v2" / "fallvision_cache"
+OUT_DIR = V3_ROOT / "data" / "fallvision_cache"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 KP_NAMES = [

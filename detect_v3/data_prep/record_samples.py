@@ -23,12 +23,13 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+HERE = Path(__file__).resolve().parent
+V3_ROOT = HERE.parent
+ROOT = V3_ROOT.parent
+MODEL_DIR = V3_ROOT / "model"
+sys.path.insert(0, str(MODEL_DIR))
 from fall_common import (FALL, LIE, NORMAL, SIT, SKELETON, SRC_FPS, YOLO_IMGSZ,  # noqa: E402
                          pick_from_result)
-
-HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent
 LABELS = {ord("1"): ("normal", NORMAL), ord("2"): ("sit", SIT), ord("3"): ("lie", LIE)}
 COUNTDOWN_S, FALL_S, AFTER_S = 3.0, 1.3, 2.7
 
@@ -51,8 +52,8 @@ def save_clip(out_dir, name, rec, size):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", default="0")
-    ap.add_argument("--out", type=Path, default=HERE / "own_data")
-    ap.add_argument("--weights", default=str(ROOT / "yolov8n-pose.pt"))
+    ap.add_argument("--out", type=Path, default=V3_ROOT / "data" / "own_data")
+    ap.add_argument("--weights", default=str(MODEL_DIR / "yolov8n-pose.pt"))
     args = ap.parse_args()
     src = int(args.source) if args.source.isdigit() else args.source
     weights = args.weights if Path(args.weights).exists() else "yolov8n-pose.pt"

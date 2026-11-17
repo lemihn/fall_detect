@@ -8,25 +8,30 @@ Hệ thống nhận diện tư thế và phát hiện té ngã theo thời gian 
 
 ```text
 fall_detect/
-├── detect_v3/                        # Pipeline nhận diện, huấn luyện & chạy thực tế v3
-│   ├── fall_common.py                # Bộ lọc khớp xương, PoseTracker, đặc trưng 66 chiều, FallNet & AlertStateMachine
-│   ├── fall_data.py                  # Nạp đa nguồn dữ liệu, tạo cửa sổ 2s & chia tập không rò rỉ (Zero Leakage)
-│   ├── 1_extract_pose_cache.py       # Bước 1: Trích xuất khung xương YOLOv8-Pose ra .npz
-│   ├── 2_train.py                    # Bước 2: Huấn luyện mô hình 4 lớp (BiLSTM + Hard-Negative Mining)
-│   ├── 3_evaluate.py                 # Bước 3: Đánh giá theo cửa sổ & mức sự kiện
-│   ├── 4_realtime.py                 # Bước 4: Chạy thực tế (Camera/Video + Web Dashboard + ESP32 + Telegram)
-│   ├── verify_v3.py                  # Kiểm chứng đa góc camera & đa người đồng thời
-│   ├── record_samples.py             # Thu thập thêm mẫu qua Webcam
-│   ├── import_own_videos.py          # Import video tự quay (.mp4/.avi) để huấn luyện bổ sung
-│   ├── download_fallvision.py        # Tải keypoints CSV bộ FallVision
-│   ├── convert_fallvision_to_cache.py# Chuyển đổi FallVision CSV sang .npz
-│   ├── prepare_multicam_data.py      # Chuẩn bị dữ liệu Multiple Cameras Fall (8 góc trần)
-│   ├── prepare_gmdcsa24_data.py      # Chuẩn bị dữ liệu GMDCSA24 (đa góc & che khuất)
-│   ├── prepare_cctv_data.py          # Chuẩn bị dữ liệu Simuletic CCTV góc cao
-│   ├── telegram_chats.json           # Lưu danh sách chat_id nhận cảnh báo Telegram
-│   └── models/
-│       ├── fall_net_v3_lstm.pth      # Trọng số mô hình BiLSTM dùng cho 4_realtime.py & verify_v3.py
-│       └── fall_net.pth              # Trọng số mô hình BiLSTM chuẩn (mặc định cho 2_train.py / 3_evaluate.py)
+├── detect_v3/                        # Hệ thống v3 đã sắp xếp gọn theo 5 thư mục
+│   ├── data_prep/                    # Mục chuẩn bị dữ liệu (trích xuất pose cache .npz)
+│   │   ├── 1_extract_pose_cache.py
+│   │   ├── download_fallvision.py
+│   │   ├── convert_fallvision_to_cache.py
+│   │   ├── prepare_multicam_data.py
+│   │   ├── prepare_gmdcsa24_data.py
+│   │   ├── prepare_cctv_data.py
+│   │   ├── import_own_videos.py
+│   │   └── record_samples.py
+│   ├── model/                        # Mục model (thuật toán, train, đánh giá, chạy thực tế)
+│   │   ├── fall_common.py            # Bộ lọc khớp xương, PoseTracker, 66 đặc trưng, FallNet & AlertStateMachine
+│   │   ├── fall_data.py              # Nạp đa nguồn dữ liệu, cửa sổ 2s & chia tập Zero Data Leakage
+│   │   ├── 2_train.py                # Train mô hình (BiLSTM / Transformer + HNM)
+│   │   ├── 3_evaluate.py             # Đánh giá Window-level & Event-level
+│   │   ├── 4_realtime.py             # Chạy thực tế (Camera/Video + Web Dashboard + ESP32 + Telegram 10s)
+│   │   ├── verify_v3.py              # Kiểm chứng đa góc & đa người đồng thời
+│   │   ├── telegram_chats.json
+│   │   └── weights/
+│   │       ├── fall_net_v3_lstm.pth
+│   │       └── fall_net.pth
+│   ├── data/                         # Dữ liệu thô & cache .npz
+│   ├── test/                         # Video test đầu vào (.mp4)
+│   └── result/                       # Video & ảnh kết quả sau khi chạy test
 ├── TEST_GIAO_DIEN/
 │   └── TEST_GIAO_DIEN.ino            # Firmware ESP32 (WebServer :80, còi báo động, LED, TFT ST7735, SIM)
 └── scripts/
@@ -64,13 +69,13 @@ python scripts/check_env.py
 
 ```bash
 # Chạy với camera mặc định (index 0) + kết nối ESP32 + Web Dashboard (:5000)
-python3 detect_v3/4_realtime.py --source 0 --esp32-ip 192.168.1.108
+python3 detect_v3/model/4_realtime.py --source 0 --esp32-ip 192.168.1.108
 
 # Trên PC muốn bật thêm cửa sổ OpenCV trực tiếp:
-python detect_v3/4_realtime.py --source 0 --esp32-ip 192.168.1.108 --show
+python detect_v3/model/4_realtime.py --source 0 --esp32-ip 192.168.1.108 --show
 
-# Chạy thử trên file video có sẵn (giới hạn kích thước hiển thị 640px):
-python detect_v3/4_realtime.py --source path/to/video.mp4 --max-size 640 --show
+# Chạy thử trên file video trong mục test/ và lưu video kết quả vào mục result/:
+python detect_v3/model/4_realtime.py --selftest detect_v3/test/03.mp4 --save-result
 ```
 
 ### Luồng cảnh báo 2 tầng
@@ -81,12 +86,12 @@ python detect_v3/4_realtime.py --source path/to/video.mp4 --max-size 640 --show
 
 ## 4. Tự thêm video quay thực tế & Huấn luyện lại (Tùy chọn)
 
-1. Bỏ các video `.mp4` tự quay vào các thư mục con tương ứng trong `detect_v3/own_videos/{normal,sit,lie,fall}/`.
+1. Bỏ các video `.mp4` tự quay vào các thư mục con tương ứng trong `detect_v3/data/own_videos/{normal,sit,lie,fall}/`.
 2. Chạy lệnh import và huấn luyện lại:
 ```bash
-python detect_v3/import_own_videos.py --retrain
+python detect_v3/data_prep/import_own_videos.py --retrain
 ```
 3. Kiểm chứng toàn diện mô hình:
 ```bash
-python detect_v3/verify_v3.py
+python detect_v3/model/verify_v3.py
 ```

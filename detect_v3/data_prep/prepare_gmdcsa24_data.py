@@ -4,18 +4,22 @@ into .npz pose cache in detect_v3/gmd_cache/ using YOLOv8n-Pose.
 """
 import csv
 import re
+import sys
 from pathlib import Path
 
 import cv2
 import numpy as np
 from ultralytics import YOLO
 
+HERE = Path(__file__).resolve().parent
+V3_ROOT = HERE.parent
+ROOT = V3_ROOT.parent
+MODEL_DIR = V3_ROOT / "model"
+sys.path.insert(0, str(MODEL_DIR))
 from fall_common import FALL, IGNORE, LIE, NORMAL, SIT, YOLO_IMGSZ, pick_from_result
 
-HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent
-GMD_DIR = HERE / "external_data" / "gmdcsa24" / "GMDCSA24-A-Dataset-for-Human-Fall-Detection-in-Videos-master"
-OUT_DIR = HERE / "gmd_cache"
+GMD_DIR = V3_ROOT / "data" / "external_data" / "gmdcsa24" / "GMDCSA24-A-Dataset-for-Human-Fall-Detection-in-Videos-master"
+OUT_DIR = V3_ROOT / "data" / "gmd_cache"
 
 CLASS_PAT = re.compile(r"([A-Za-z ()]+?)\s*\[([^\[\]]*)")
 RANGE_PAT = re.compile(r"([\d.]+)\s*to\s*([\d.]+)")
@@ -34,7 +38,9 @@ def parse_intervals(cls_str: str):
 
 
 def main():
-    weights = ROOT / "yolov8n-pose.pt"
+    weights = MODEL_DIR / "yolov8n-pose.pt"
+    if not weights.exists():
+        weights = ROOT / "yolov8n-pose.pt"
     pose = YOLO(str(weights))
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
