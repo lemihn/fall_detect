@@ -1,4 +1,4 @@
-"""Dashboard agent - chay tren Pi, song song voi detect_v3/4_realtime.py (KHONG sua code do).
+"""Dashboard agent - chay tren Pi, song song voi detect_v3/model/4_realtime.py (KHONG sua code do).
 
     python dashboard_agent/agent.py
 

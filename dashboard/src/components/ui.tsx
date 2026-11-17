@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { Icon } from './Icon'
 import { useSnapshot } from '../lib/snapshots'
-import { useStreamUrl } from '../lib/gateway'
+import { streamBase, useStreamUrl } from '../lib/gateway'
 import type { Device, EventStatus } from '../lib/types'
 import { STATUS_LABEL, STATUS_PILL, VIEW_LABEL, VIEW_PILL, deviceView, fmtAgo, isOnline } from '../lib/format'
 
@@ -55,7 +55,8 @@ export function StreamView({ d, now, overlay }: { d: Device | undefined; now: nu
   let msg: ReactNode = null
   if (!d) msg = 'Chưa chọn thiết bị'
   else if (!isOnline(d, now)) msg = <><Icon name="wifioff" />Camera offline<br /><span style={{ fontSize: 12 }}>Mất kết nối {fmtAgo(d.last_seen, now)}</span></>
-  else if (!d.stream_url) msg = <><Icon name="cam" />Chưa có kết nối camera từ xa<br /><span style={{ fontSize: 12 }}>Kiểm tra cloudflared trên Pi</span></>
+  else if (!d.stream_url) msg = <><Icon name="cam" />Chưa có kết nối camera từ xa<br /><span style={{ fontSize: 12 }}>Kiểm tra cloudflared hoặc PUBLIC_STREAM_URL trên Pi</span></>
+  else if (!streamBase(d)) msg = <><Icon name="warn" />Link camera không hợp lệ<br /><span style={{ fontSize: 12 }}>Kiểm tra PUBLIC_STREAM_URL trong dashboard_agent/.env</span></>
   else if (failed) msg = <><Icon name="refresh" />Không tải được video<br /><span style={{ fontSize: 12 }}>Đang thử lại…</span></>
   else if (!src) msg = 'Đang kết nối…'
 

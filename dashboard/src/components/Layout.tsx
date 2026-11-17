@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Icon } from './Icon'
+import { Brand } from './Brand'
 import { useAuth, displayName, initials } from '../lib/auth'
 import { useData } from '../lib/data'
 import { deviceName, fmtDate, fmtDuration, fmtTime } from '../lib/format'
@@ -60,7 +61,7 @@ function Sidebar() {
   const { openEvents, realtime } = useData()
   return (
     <aside className="sidebar">
-      <div className="brand"><div className="brand-mark"><Icon name="logo" strokeWidth={2} /></div><div><div className="brand-name">Giám sát té ngã</div><div className="brand-sub">Bảng điều khiển</div></div></div>
+      <Brand />
       <nav className="nav">
         <div className="nav-label">Giám sát</div>
         {NAV.map(n => (
@@ -73,8 +74,9 @@ function Sidebar() {
         <NavLink to="/settings" className={({ isActive }) => (isActive ? 'active' : '')}><Icon name="gear" />Cài đặt</NavLink>
       </nav>
       <div className="sidebar-foot">
-        <span className={`rt-dot ${realtime}`} />
-        {realtime === 'live' ? 'Đồng bộ thời gian thực' : realtime === 'connecting' ? 'Đang kết nối…' : 'Mất kết nối, đang thử lại'}
+        <div><span className={`rt-dot ${realtime}`} />
+          {realtime === 'live' ? 'Đồng bộ thời gian thực' : realtime === 'connecting' ? 'Đang kết nối…' : 'Mất kết nối, đang thử lại'}</div>
+        <div className="copyright">© {new Date().getFullYear()} SMLab</div>
       </div>
     </aside>
   )
@@ -107,7 +109,8 @@ function MobileTop({ title }: { title: string }) {
   const nav = useNavigate()
   return (
     <div className="mtop">
-      <div className="brand-mark"><Icon name="logo" strokeWidth={2} /></div><b>{title}</b>
+      <div className="brand-mark"><Icon name="logo" strokeWidth={2.2} /></div>
+      <div className="mtop-title"><small>SMLab</small><b>{title}</b></div>
       <button className="icon-btn" onClick={() => nav('/settings')} aria-label="Cài đặt" style={{ marginLeft: 'auto' }}><Icon name="gear" /></button>
       <button className="icon-btn" onClick={() => nav('/alerts')} aria-label="Cảnh báo" style={{ marginLeft: 0 }}>
         <Icon name="bell" />{openEvents.length > 0 && <span className="badge">{openEvents.length}</span>}

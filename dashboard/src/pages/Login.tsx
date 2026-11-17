@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Icon } from '../components/Icon'
+import { Brand } from '../components/Brand'
 import { useAuth } from '../lib/auth'
 
 export function LoginPage() {
@@ -21,7 +22,7 @@ export function LoginPage() {
   return (
     <div className="login">
       <section className="login-left">
-        <div className="brand"><div className="brand-mark"><Icon name="logo" strokeWidth={2} /></div><div><div className="brand-name">Giám sát té ngã</div><div className="brand-sub">Bảng điều khiển quản trị</div></div></div>
+        <Brand sub="Hệ thống giám sát té ngã" />
         <h2>Theo dõi an toàn người thân theo thời gian thực, mọi lúc, mọi nơi.</h2>
         <p>Nhận cảnh báo té ngã ngay khi xảy ra, xem camera trực tiếp và xác nhận xử lý từ máy tính hoặc điện thoại.</p>
         <div className="facts">
@@ -29,10 +30,11 @@ export function LoginPage() {
           <div><b>Camera live</b><span>xem từ xa qua kết nối bảo mật</span></div>
           <div><b>24/7</b><span>giám sát liên tục</span></div>
         </div>
-        <div className="foot">Hệ thống phát hiện té ngã · Raspberry Pi + ESP32</div>
+        <div className="foot">© {new Date().getFullYear()} SMLab · Hệ thống phát hiện té ngã · Raspberry Pi + ESP32</div>
       </section>
       <section className="login-right">
         <form className="form" onSubmit={submit}>
+          <div className="login-mobile-brand"><Brand sub="Hệ thống giám sát té ngã" /></div>
           <h1>Đăng nhập</h1>
           <div className="lead">Dùng tài khoản do quản trị viên cấp.</div>
           <div className="field">

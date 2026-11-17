@@ -4,7 +4,7 @@ import { Icon } from '../components/Icon'
 import { ProbBars } from '../components/charts'
 import { DevicePill, Empty, Esp32Pill, StreamView, Thumb, useToast } from '../components/ui'
 import { useData } from '../lib/data'
-import { accessToken, hasStream, resetAlarm, switchCamera, usePiStatus } from '../lib/gateway'
+import { accessToken, hasStream, resetAlarm, streamBase, switchCamera, usePiStatus } from '../lib/gateway'
 import { deviceName, deviceView, fmtAgo, fmtDuration, fmtNumber, fmtTime, isOnline } from '../lib/format'
 import type { Device } from '../lib/types'
 
@@ -12,17 +12,18 @@ import type { Device } from '../lib/types'
 function MiniPreview({ d, now }: { d: Device; now: number }) {
   const [src, setSrc] = useState<string | null>(null)
   const ok = hasStream(d, now)
+  const base = streamBase(d)
   useEffect(() => {
     if (!ok) { setSrc(null); return }
     let alive = true
     const load = async () => {
       const t = await accessToken()
-      if (alive && t) setSrc(`${d.stream_url}/snapshot?token=${encodeURIComponent(t)}&t=${Date.now()}`)
+      if (alive && t) setSrc(`${base}/snapshot?token=${encodeURIComponent(t)}&t=${Date.now()}`)
     }
     load()
     const id = setInterval(load, 10_000)
     return () => { alive = false; clearInterval(id) }
-  }, [ok, d.stream_url])
+  }, [ok, base])
   return (
     <div className="cam">
       {src ? <img className="stream" src={src} alt={deviceName(d)} onError={() => setSrc(null)} /> : (
@@ -83,7 +84,7 @@ export function CameraPage() {
             {live && <a className="btn btn-sm btn-ghost-white" href="#" onClick={async e => {
               e.preventDefault()
               const t = await accessToken()
-              if (t) window.open(`${selected.stream_url}/snapshot?token=${encodeURIComponent(t)}`, '_blank', 'noopener')
+              if (t) window.open(`${streamBase(selected)}/snapshot?token=${encodeURIComponent(t)}`, '_blank', 'noopener')
             }}><Icon name="img" />Chụp ảnh</a>}
             {live && <button className="btn btn-sm btn-ghost-white" onClick={() => {
               const img = document.querySelector<HTMLImageElement>('.cam-big img.stream')

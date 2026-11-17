@@ -5,6 +5,7 @@ import { DevicePill, Empty, Esp32Pill, useToast } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { useData } from '../lib/data'
 import { deviceName, fmtAgo, fmtNumber, isOnline } from '../lib/format'
+import { streamBase } from '../lib/gateway'
 import type { Device } from '../lib/types'
 
 function DeviceCard({ d }: { d: Device }) {
@@ -52,7 +53,7 @@ function DeviceCard({ d }: { d: Device }) {
             <dt>Vị trí</dt><dd>{d.location || '–'}</dd>
             <dt>Heartbeat</dt><dd>{fmtAgo(d.last_seen, now)}</dd>
             <dt>Nhận diện</dt><dd>{online ? (d.state === 'unknown' ? 'Chưa chạy 4_realtime.py' : `${fmtNumber(d.fps ?? 0)} FPS · ${d.persons_count} người`) : '–'}</dd>
-            <dt>Camera từ xa</dt><dd>{online && d.stream_url ? 'Sẵn sàng' : online ? 'Chưa có tunnel' : '–'}</dd>
+            <dt>Camera từ xa</dt><dd>{online && streamBase(d) ? 'Sẵn sàng' : online && d.stream_url ? 'Link không hợp lệ' : online ? 'Chưa có tunnel' : '–'}</dd>
             <dt>Hộp ESP32</dt><dd><Esp32Pill d={d} now={now} /></dd>
             <dt>Ca ngã đã ghi</dt><dd className="num">{total}</dd>
             <dt>Agent</dt><dd>{d.agent_version ? 'v' + d.agent_version : '–'}</dd>

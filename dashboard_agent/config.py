@@ -94,4 +94,26 @@ class Config:
             raise SystemExit(f"Thieu cau hinh: {', '.join(missing)}. Xem dashboard_agent/.env.example")
         if cfg.tunnel not in ("quick", "off"):
             raise SystemExit("TUNNEL chi nhan 'quick' hoac 'off'")
+        cfg.public_stream_url = clean_url("PUBLIC_STREAM_URL", cfg.public_stream_url)
+        cfg.supabase_url = clean_url("SUPABASE_URL", cfg.supabase_url)
+        if not cfg.supabase_url:
+            raise SystemExit("SUPABASE_URL khong hop le. Vi du: SUPABASE_URL=https://xxxx.supabase.co")
         return cfg
+
+
+def clean_url(name: str, value: str) -> str:
+    """Sua loi go thuong gap trong .env: lap ten bien ('X= X=http://...'), dau cach, ngoac.
+    Tra ve '' neu khong phai link http(s) hop le."""
+    v = value.strip().strip("\"'").strip()
+    while v.upper().startswith(name.upper() + "="):  # dan ca dong mau vao sau 'X='
+        v = v[len(name) + 1:].strip()
+    v = v.rstrip("/")
+    if not v:
+        return ""
+    if not (v.startswith("http://") or v.startswith("https://")) or any(c.isspace() for c in v):
+        print(f"[config] CANH BAO: {name}='{value}' khong phai link http(s) hop le -> bo qua. "
+              f"Vi du dung: {name}=http://127.0.0.1:8080", flush=True)
+        return ""
+    if v != value.strip():
+        print(f"[config] Da tu sua {name} thanh '{v}'", flush=True)
+    return v

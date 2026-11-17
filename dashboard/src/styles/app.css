@@ -142,6 +142,35 @@ textarea.note-input { width: 100%; border: 1px solid var(--line); border-radius:
 .toggle.on { background: var(--navy-700); }
 .toggle.on::after { left: 21px; }
 
+
+/* ----- sidebar + thuong hieu SMLab (sac net hon: tuong phan cao, chu dam, muc dang chon nen trang) ----- */
+.sidebar { background: #0b1f3a; border-right: 1px solid #06142a; -webkit-font-smoothing: auto; -moz-osx-font-smoothing: auto; }
+.brand { padding: 20px 18px 18px; gap: 12px; border-bottom: 1px solid rgba(255,255,255,.1); }
+.brand-mark { width: 38px; height: 38px; border-radius: 7px; background: #fff; color: #0b1f3a; flex: none; }
+.brand-mark svg { width: 24px; height: 24px; }
+.brand-name { font-size: 20px; font-weight: 700; letter-spacing: .02em; line-height: 1.1; color: #fff; }
+.brand-name span { color: #7fb0ff; }
+.brand-sub { font-size: 12px; color: #b3c3d8; font-weight: 500; margin-top: 2px; }
+.nav { padding: 14px 12px; gap: 3px; }
+.nav-label { color: #8ea4c0; font-weight: 700; font-size: 11px; letter-spacing: .09em; padding: 14px 12px 7px; }
+.nav a { color: #dbe5f1; font-weight: 500; font-size: 14px; padding: 10px 12px; border-radius: 6px; gap: 12px; }
+.nav a svg { width: 19px; height: 19px; opacity: 1; stroke-width: 2; }
+.nav a:hover:not(.active) { background: rgba(255,255,255,.08); color: #fff; }
+.nav a.active { background: #fff; color: #0b1f3a; font-weight: 700; box-shadow: none; }
+.nav a.active svg { color: #1f4675; }
+.nav a .count { font-size: 11.5px; line-height: 19px; padding: 0 7px; }
+.sidebar-foot { border-top: 1px solid rgba(255,255,255,.1); color: #b3c3d8; font-weight: 500; font-size: 12.5px; padding: 14px 20px; display: grid; gap: 4px; }
+.sidebar-foot .copyright { font-size: 11.5px; color: #7f93ad; font-weight: 400; }
+.login-left .brand-mark { background: #fff; }
+.login-mobile-brand { display: none; margin-bottom: 26px; }
+.login-mobile-brand .brand { border: 0; padding: 0; }
+.login-mobile-brand .brand-name { color: var(--navy-800); }
+.login-mobile-brand .brand-name span { color: var(--blue); }
+.login-mobile-brand .brand-sub { color: var(--muted); }
+.login-mobile-brand .brand-mark { background: var(--navy-800); color: #fff; }
+.mtop-title { display: flex; flex-direction: column; line-height: 1.15; }
+.mtop-title small { font-size: 11px; font-weight: 700; letter-spacing: .06em; color: #7fb0ff; }
+
 /* ----- mobile ----- */
 .tabbar { display: none; }
 .mtop { display: none; }
@@ -154,8 +183,9 @@ textarea.note-input { width: 100%; border: 1px solid var(--line); border-radius:
   .app { grid-template-columns: 1fr; }
   .sidebar, .topbar { display: none; }
   .mtop { display: flex; position: sticky; top: 0; z-index: 20; background: var(--navy-800); color: #fff; padding: calc(10px + env(safe-area-inset-top)) 16px 12px; align-items: center; gap: 10px; }
-  .mtop .brand-mark { width: 28px; height: 28px; }
+  .mtop .brand-mark { width: 30px; height: 30px; }
   .mtop .brand-mark svg { width: 20px; height: 20px; }
+  .mtop { background: #0b1f3a; }
   .mtop b { font-size: 16px; font-weight: 600; }
   .mtop .icon-btn { margin-left: auto; background: transparent; border-color: rgba(255,255,255,.25); color: #fff; }
   .mtop .icon-btn .badge { border-color: var(--navy-800); }
@@ -182,6 +212,7 @@ textarea.note-input { width: 100%; border: 1px solid var(--line); border-radius:
   .tabbar a .count { position: absolute; top: 8px; left: 50%; margin-left: 6px; background: var(--red-600); color: #fff; font-size: 9.5px; font-weight: 700; border-radius: 7px; padding: 0 4px; line-height: 14px; }
   .login { grid-template-columns: 1fr; }
   .login-left { display: none; }
+  .login-mobile-brand { display: block; }
   .login-right { padding: 32px 22px; align-items: flex-start; padding-top: 18vh; }
   .alerts-layout .detail { position: fixed; inset: auto 0 0 0; z-index: 40; max-height: 88vh; overflow: auto; border-radius: 12px 12px 0 0; display: none; }
   .alerts-layout .detail.open { display: block; }

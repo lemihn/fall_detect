@@ -9,8 +9,15 @@ export async function accessToken(): Promise<string | null> {
   return data.session?.access_token ?? null
 }
 
+/** Link gateway hop le (http/https), bo dau '/' cuoi; null neu agent gui len gia tri hong */
+export function streamBase(d: Device | undefined): string | null {
+  const u = d?.stream_url?.trim()
+  if (!u || !/^https?:\/\/[^\s/]+/i.test(u)) return null
+  return u.replace(/\/+$/, '')
+}
+
 export function hasStream(d: Device | undefined, now = Date.now()): boolean {
-  return !!d && !!d.stream_url && isOnline(d, now)
+  return !!d && !!streamBase(d) && isOnline(d, now)
 }
 
 /** URL video MJPEG kem token, doi khi token duoc lam moi */
@@ -22,13 +29,14 @@ export function useStreamUrl(d: Device | undefined, now: number): string | null 
     return () => data.subscription.unsubscribe()
   }, [])
   if (!hasStream(d, now) || !token) return null
-  return `${d!.stream_url}/stream?token=${encodeURIComponent(token)}`
+  return `${streamBase(d)}/stream?token=${encodeURIComponent(token)}`
 }
 
 async function call(d: Device, path: string, init?: RequestInit): Promise<Response> {
   const token = await accessToken()
-  if (!d.stream_url || !token) throw new Error('Thiết bị chưa có kết nối camera')
-  return fetch(d.stream_url + path, {
+  const base = streamBase(d)
+  if (!base || !token) throw new Error('Thiết bị chưa có kết nối camera')
+  return fetch(base + path, {
     ...init,
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(init?.headers || {}) },
   })
@@ -56,7 +64,7 @@ export async function switchCamera(d: Device, camera: number): Promise<string | 
 export function usePiStatus(d: Device | undefined, now: number, enabled = true): PiStatus | null {
   const [st, setSt] = useState<PiStatus | null>(null)
   const ok = enabled && hasStream(d, now)
-  const url = d?.stream_url
+  const url = streamBase(d)
   useEffect(() => {
     if (!ok || !d) { setSt(null); return }
     let alive = true

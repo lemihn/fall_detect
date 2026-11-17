@@ -1,6 +1,6 @@
 # Dashboard agent (chạy trên Raspberry Pi)
 
-Chương trình nhỏ chạy **song song** với `detect_v3/4_realtime.py` để đưa dữ liệu lên website quản trị. Agent **không sửa code nhận diện**: nó chỉ đọc các link sẵn có của Flask (`/status`, `/video_feed`) và của ESP32 (`/data`).
+Chương trình nhỏ chạy **song song** với `detect_v3/model/4_realtime.py` để đưa dữ liệu lên website quản trị. Agent **không sửa code nhận diện**: nó chỉ đọc các link sẵn có của Flask (`/status`, `/video_feed`) và của ESP32 (`/data`).
 
 ```
 4_realtime.py (Flask :5000) ──localhost──► dashboard_agent ──► Supabase (heartbeat, ca ngã, ảnh)
@@ -82,7 +82,7 @@ journalctl -u dashboard-agent -f    # xem log
 
 ```bash
 # Terminal 1: chạy nhận diện với video có sẵn
-python detect_v3/4_realtime.py --source duong_dan_video_te_nga.mp4
+python detect_v3/model/4_realtime.py --source duong_dan_video_te_nga.mp4
 # Terminal 2: chạy agent (.env đặt TUNNEL=off nếu laptop chưa cài cloudflared)
 python dashboard_agent/agent.py
 ```

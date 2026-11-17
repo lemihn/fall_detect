@@ -5,7 +5,7 @@ import { BarChart } from '../components/charts'
 import { DevicePill, Empty, Esp32Pill, StreamView, useToast } from '../components/ui'
 import { useDeviceFilter } from '../components/Layout'
 import { useData } from '../lib/data'
-import { resetAlarm } from '../lib/gateway'
+import { hasStream, resetAlarm } from '../lib/gateway'
 import { addDays, avgResponse, countsPerDay, inRange, startOfDay } from '../lib/stats'
 import { deviceName, deviceView, fmtAgo, fmtDuration, fmtNumber, fmtTime, isOnline } from '../lib/format'
 import type { Device, FallEvent } from '../lib/types'
@@ -94,7 +94,7 @@ export function OverviewPage() {
             <span className="muted">{!featured ? 'Chưa có thiết bị' : isOnline(featured, now)
               ? `${featured.id}${featured.fps ? ` · ${fmtNumber(featured.fps)} FPS` : ''} · ${featured.persons_count} người trong khung hình`
               : `${featured.id} · mất kết nối ${fmtAgo(featured.last_seen, now)}`}</span>
-            {featured && isOnline(featured, now) && featured.stream_url && (
+            {featured && hasStream(featured, now) && (
               <button className="btn btn-sm btn-danger" onClick={async () => {
                 const err = await resetAlarm(featured)
                 toast(err ? 'Không tắt được báo động: ' + err : 'Đã gửi lệnh tắt báo động', !!err)
